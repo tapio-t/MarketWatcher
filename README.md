@@ -64,11 +64,7 @@ Not investment advice.
 
 ## Security
 
-- **API key encrypted.** AES-256-GCM with a key held in Android Keystore (secure hardware,
-  StrongBox when available; usable only by this app, cannot be copied off the phone). Only
-  `iv:ciphertext` is stored, in `marketwatcher_secrets`. No unlock requirement, so the background
-  check works while the phone is locked. (Jetpack `EncryptedSharedPreferences` is deprecated, so
-  the app uses Keystore directly, with no extra library.)
+- **API key encrypted.**
 - **Automatic migration from plain text** (versions up to 0.10). At the start of the first data
   load (app or background check, whichever comes first), off the main thread: encrypt, read
   back, and only then delete the plain-text entry (`commit()`). If anything fails, the plain-text
@@ -78,8 +74,6 @@ Not investment advice.
   Backups stay on: Android keeps only the latest backup, so the next nightly backup replaces any
   older one that still held the plain-text key. A key restored onto another phone can't be
   decrypted there; the app then asks for it again.
-- **Old Dip Watch app.** If `fi.dipwatch` is installed, Settings offers **Uninstall Dip Watch**
-  (it still holds the key in plain text; Android asks you to confirm the uninstall).
 - **Error texts** shown on screen or saved as the last background check pass through `Redact`,
   which replaces any `api_key=…` or key-shaped value with `***`. Requests never follow redirects.
 - **Network:** HTTPS only to `api.stlouisfed.org`; cleartext traffic disabled in the manifest.
