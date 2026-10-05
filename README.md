@@ -69,11 +69,7 @@ Not investment advice.
   load (app or background check, whichever comes first), off the main thread: encrypt, read
   back, and only then delete the plain-text entry (`commit()`). If anything fails, the plain-text
   key keeps working and the move is retried next time. Nothing to do by hand.
-- **Backups.** Cloud backup and device transfer exclude `marketwatcher_secrets.xml` and
-  `marketwatcher_settings.xml` (`res/xml/data_extraction_rules.xml`, `backup_rules.xml`).
-  Backups stay on: Android keeps only the latest backup, so the next nightly backup replaces any
-  older one that still held the plain-text key. A key restored onto another phone can't be
-  decrypted there; the app then asks for it again.
+- **Backups.**
 - **Error texts** shown on screen or saved as the last background check pass through `Redact`,
   which replaces any `api_key=…` or key-shaped value with `***`. Requests never follow redirects.
 - **Network:** HTTPS only to `api.stlouisfed.org`; cleartext traffic disabled in the manifest.
