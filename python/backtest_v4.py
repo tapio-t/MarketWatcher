@@ -96,7 +96,7 @@ def first_state(R, a, b, state):
 def report(R):
     print(f"{len(R)} readings {R[0].date} .. {R[-1].date}")
     print(f"\n{'dip (peak -> new high)':24} {'low date':10} {'maxDD':>6} | "
-          f"{'first wave fading':17} {'vsLow':>6} {'further':>7} | "
+          f"{'this wave fading':17} {'vsLow':>6} {'further':>7} | "
           f"{'uptrend restored':16} {'vsLow':>6} {'further':>7}")
     rows = []
     for a, b in episodes_ath(R):

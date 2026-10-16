@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
+import fi.marketwatcher.data.BundledData
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -96,6 +98,8 @@ internal fun HistoryScreen(data: ChartData?) {
     // A value pop-up shows the day that was selected when its tile was tapped.
     var infoFor by remember { mutableStateOf<Pair<InfoKind, Reading>?>(null) }
     val haptic = LocalHapticFeedback.current
+    val ctx = LocalContext.current
+    val dataMissing = remember { BundledData.isMissing(ctx) }
 
     // One place that moves the selection: clamps, and ticks the phone at each new year.
     val select: (Int) -> Unit = remember(data, haptic) {
@@ -125,6 +129,8 @@ internal fun HistoryScreen(data: ChartData?) {
                         label = { Text("$y", fontSize = 12.sp) })
                 }
             }
+            if (dataMissing) Text(BundledData.MISSING_TEXT, fontSize = 12.sp, lineHeight = 16.sp,
+                color = palette().warn, modifier = Modifier.testTag("bundledDataMissing"))
             BigChart(data, sel, scrub, Modifier.fillMaxWidth().height(chartHeight))
             Scrubber(0..n - 1, sel, scrub)
             DayLine(data, sel)

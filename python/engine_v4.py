@@ -62,7 +62,7 @@ TITLES = {
     "CALM": "No panic",
     "PULLBACK": "Pullback",
     "PANIC": "Panic",
-    "FIRST_WAVE_FADING": "First wave fading",
+    "FIRST_WAVE_FADING": "This wave fading",
     "NEW_WAVE": "New wave",
     "BEAR_GRIND": "Bear grind",
     "UPTREND_RESTORED": "Uptrend restored",
@@ -73,7 +73,7 @@ MESSAGES = {
     "PULLBACK": "A routine pullback. Declines of this size happen in most years.",
     "PANIC": "Panic selling: the volatility curve is inverted or VIX is extreme. "
              "The low may be days away or much further down.",
-    "FIRST_WAVE_FADING": "The first wave of fear is fading and the index has "
+    "FIRST_WAVE_FADING": "This wave of fear is fading and the index has "
                          "stopped making new lows. In 2008-2026 about 4 in 10 of "
                          "these were followed by another leg down.",
     "NEW_WAVE": "Fear has returned after it faded: a new VIX high or a new low "

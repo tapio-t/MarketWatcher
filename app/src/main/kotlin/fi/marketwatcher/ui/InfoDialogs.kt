@@ -64,7 +64,7 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
             val explanation = listOf(AnnotatedString("Above 1.0 the curve is in backwardation — near-term stress and " +
                 "hedging demand; below it, contango, the calm-market default."))
             val inApp = "In MarketWatcher: VIX/VIX3M at ${fmt("%.2f", Thresholds.PANIC_RATIO)} or above is one of the Panic " +
-                "rules (${fmt("%.2f", Thresholds.RELAPSE_RATIO)} or above after the first wave has faded)."
+                "rules (${fmt("%.2f", Thresholds.RELAPSE_RATIO)} or above after this wave has faded)."
             val flag = r.backwardation
             Info(title, value, date, explanation, inApp, flag, URL_VIX, flagName = "Backwardation")
         }
