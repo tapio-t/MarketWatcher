@@ -5,3 +5,8 @@ build/
 local.properties
 *.iml
 captures/
+__pycache__/
+# Market data belongs in the private MarketWatcher-data repository, never here.
+app/src/main/assets/
+app/src/test/resources/golden_v4.json
+*.csv

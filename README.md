@@ -15,6 +15,14 @@ Not investment advice.
   - "Suggested: <State>" box. Tap it to see why: the engine's rules in checking order, each
     marked ✓ (decided), ✗ (checked, not met) or · (not reached), with that day's numbers.
     The pop-up closes with the Close button at the bottom, back, or a tap outside it.
+  - **S&P 500 day change** (since 0.16), directly below the Suggested box: Close, Prev. close and
+    Day change (amber at −2.00% or worse, with the fall tier under the value, ⓘ pop-up).
+  - **The S&P 500 close does not wait for VIX** (since 0.16). FRED adds the S&P 500 close about
+    03:00 Helsinki time, VIX/VIX3M about 16:40 the next day. Days with only the close
+    (`engine/PriceDays.kt`, same rules as the engine) update the day change, S&P 500 and Trend
+    tiles at once; the Suggested state and the other tiles stay on the last day with VIX. Then the
+    Suggested box says "for DD.MM.YYYY · waiting for VIX of newer days" and the data line shows
+    "S&P 500 to … · VIX to …".
   - Values, each with the date of its observation under it:
     S&P 500 (close, all-time high, from high), Trend (200-day average, distance, direction),
     Volatility (VIX, VIX3M, VIX/VIX3M), and Economy in two rows:
@@ -25,16 +33,22 @@ Not investment advice.
 
     Amber edges: "vs average" at 0.0% or below (as shown, rounded to 0.1%); "Average is" when
     Falling (200-day average lower than 20 trading days ago, the engine's own test); VIX at 30+ and in the top 5% of its past year (the VIX part of the Panic rule);
-    VIX / VIX3M at 1.00+ (backwardation); Sahm rule at 0.50+; NFCI above 0 or up 0.05+ over 4 weeks (Credit stress; until 0.13 any weekly rise
-    counted, which was on in 46% of weeks, now 22%); Buffett
+    VIX / VIX3M at 1.00+ (backwardation); Sahm rule at 0.50+; Credit stress: NFCI above 0, or
+    NFCI at −0.300 or higher and up +0.050 in 1 week, +0.115 in 4 weeks or +0.200 in 8 weeks
+    (since 0.15: on in 14% of weeks in 2007–2026, turning on 7 times; the 0.14 rule "above 0 or up
+    0.05 over 4 weeks" was on in 23%, turning on 22 times; until 0.13 any weekly rise counted); Buffett
     ratio in its top 10%; yield curve inverted (below 0); 2-year yield up 1.00 point or more in
     about 6 months (Rate shock); CAPE in the top 10% of its history since 1881.
     Every amber-capable tile shows ⓘ: tap for a pop-up with the value and date, what it means,
     how MarketWatcher uses it, whether its condition is on, and a source link.
     CAPE: Robert Shiller's official monthly value; from his latest month on, an estimate (≈) =
     latest official value × S&P 500 change since that month.
-  - Past-year S&P 500 chart coloured by state, with the dashed 200-day average. The legend under
-    it shows both latest values with their dates on their own lines.
+  - Past-year S&P 500 chart coloured by state, with the dashed 200-day average and a line key.
+    Under it a day scroller like History's (‹ › step one day, hold to repeat; drag the bar, or tap
+    or drag on the chart), the selected date and state, and the selected day's six tiles: Close,
+    All-time high, From high, 200-day avg, vs average, Average is (same amber edges and ⓘ pop-ups).
+    The selection starts at the latest day and returns to it when new data arrives. The tiles
+    at the top keep showing the latest day.
   - Link to the full TradingView SPX chart: https://www.tradingview.com/chart/?symbol=SP%3ASPX
   - Quote (italic): "It is imminent — the only thing that's unknown is the timing, location,
     duration, magnitude, policy response, recovery dynamics, and cultural impact." — Morgan Housel
@@ -49,7 +63,15 @@ Not investment advice.
     with that year's lowest close (computed: date, close, fall from the high) and 2–3 sentences
     on why the market was there (`ui/YearNotes.kt`). It closes when you move the selection.
   - The selected day's "Suggested" box (tap for why), all its values with dates (same amber
-    edges and ⓘ pop-ups as Today, for the selected day), and its past-year chart with legend.
+    edges and ⓘ pop-ups as Today, for the selected day), with a **Day change** tile in the S&P 500
+    group (since 0.16).
+  - **Recovery time** tile: the all-time high in effect on the selected day (value and date), the
+    first later close at or above it ("Reached again DD.MM.YYYY") and the time between them as
+    "X years, Y months" (whole months, counted down). On a day at an all-time high it says so; if
+    the high has not been reached again yet, it shows the time so far. Hindsight by design.
+  - The selected day's past-year chart with legend.
+  - **Ingredients of economic bubbles** card (same look as What happened), with its source:
+    Heikki Keskiväli, *Considering Stocks: Hits and Misses of a Sensible Investor*, December 13, 2020.
 - **Settings**
   - Data sources (bundled files, FRED series, how they combine), with the CAPE status and
     **Check now** (shillerdata.com) / **Import file** (a downloaded `ie_data.xls`).
@@ -90,21 +112,37 @@ Not investment advice.
 
 ## Notifications
 
-- Two notification types (Android channels), both **high importance** so they pop up as banners:
-  "State and economy" and "Below 200-day average". The old "Market state" type (default
+- **Shown only 08:00–18:00, phone time** (`work/QuietHours.kt`, `work/NotificationGate.kt`). A
+  notification found outside these hours, Test ones included, is held (newest per kind, with
+  "Found HH:MM DD.MM.YYYY" added) and shown at the next 08:00, or when the app is opened inside the
+  window. Settings lists what is held.
+- Three notification types (Android channels), all **high importance** so they pop up as banners:
+  "State and economy", "Below 200-day average" and "Sharp falls" (since 0.16). The old "Market state" type (default
   importance, no banners) is removed on start; an app cannot raise a type's importance itself.
 - Notification permission (Android 13+) is asked for only when a notification switch is turned
   on or **Test** is tapped. If Android no longer shows the request, the app opens its
   notification settings instead.
-- The rules live in one pure function (`work/NotificationRules.kt`), used by both the real
-  twice-daily background check and the tests.
+- The rules live in one pure function (`work/NotificationRules.kt`), used by the background
+  checks and the tests.
+- **Sharp falls:** the S&P 500 close 2.00% or more below the previous close (as shown, rounded to
+  0.01%), once per trading day. Tiers: −2% Sharp, −3% Very sharp, −5% Extreme fall. In 2008–2026:
+  208 / 82 / 19 days. On by default.
+- **Two background checks:**
+  - **Early check** (`work/EarlyCheckWorker.kt`): US weekdays at 20:30 New York time (03:30
+    Helsinki; 02:30 in the weeks of spring and autumn when only one of the two is on summer time). Downloads only the S&P 500
+    (one small request), because FRED adds it about 4 hours after the close but VIX/VIX3M only
+    about 16:30–17:00 Helsinki the next day. Retries hourly until the close is there or 03:30 New
+    York time (10:30 Helsinki). Runs the sharp-fall and below-200-day-average rules on it.
+  - **Full check** (`work/DailyCheckWorker.kt`): twice a day, everything; states and economy flags.
 
 **Test** (one per switch) works at once, offline too:
 
 1. Builds the notification from the latest data in the app, simulating only the previous check:
    a different state (Panic, or No panic if today is Panic) and no flags; for the 200-day test, a
    previous close above the average. If today's close is above the average, a simulated close 2%
-   below it is used; if no economy flag is on, a test flag.
+   below it is used; if no economy flag is on, a test flag; if today's change is not a sharp fall,
+   a previous close 2.5% higher. Outside 08:00–18:00 the test is held until 08:00 (said under the
+   switch).
 2. Runs the same rules and posts "Test: …" on the same notification type as the real one, with
    separate notification IDs. Nothing is saved, so real notifications are unaffected.
 3. Checks Android's list of active notifications and reports under the switch: **Shown**;
@@ -140,15 +178,37 @@ Works on Android Studio versions that support AGP 9.1 and on newer ones.
 Compose 1.12 (BOM 2026.08.00 or newer) needs AGP 9.1.1 and compileSdk 37; update all three
 together once your Android Studio supports AGP 9.1.1.
 
+## Repositories and data
+
+- **This repository (public):** code, README, tests and the Python reference engine (`python/`).
+- **MarketWatcher-data (private):** the market data the app ships with, which is copyrighted
+  (S&P Dow Jones Indices, Cboe) and so not published here: `assets/replay_2007_2026.json`,
+  `assets/cape_tr_shiller.json`, `test-resources/golden_v4.json`, and the Python backtest's
+  input files in `python-data/`. Clone it **next to** this project:
+
+  ```
+  AndroidStudioProjects/
+  ├── MarketWatcher/        (this repository)
+  └── MarketWatcher-data/   (private)
+  ```
+
+  The build adds its folders (`app/build.gradle.kts`, `sourceSets`). Without it the app still
+  builds and runs with FRED's ~10 years only, and the data-based unit tests are skipped.
+- **Every change** comes as a pull request with a version bump and a `CHANGELOG.md` entry. GitHub
+  builds it and runs the unit tests (`.github/workflows/android.yml`); `main` accepts a merge
+  only when that build passes. Each merged version is tagged (`v0.16`, …).
+
 ## Open and build
 
-1. Unzip. In Android Studio choose **File > Open** and select the **MarketWatcher** folder
-   (the one containing `settings.gradle.kts`).
+1. In Android Studio: **File > New > Project from Version Control**, URL
+   `https://github.com/tapio-t/MarketWatcher`. If Git is missing, Android Studio offers to
+   download and install it. Clone `MarketWatcher-data` the same way into the same parent folder.
 2. **Settings > Build, Execution, Deployment > Build Tools > Gradle**:
    *Distribution* = **Wrapper**, *Gradle JDK* = the bundled **jbr** (or any JDK 17+).
-3. Let the first sync finish without closing the project (it downloads Gradle 9.3.1 and the
-   libraries). If it reports a missing SDK platform or build tools, click the install link.
+3. Let the first sync finish (it downloads Gradle 9.3.1 and the libraries). If it reports a
+   missing SDK platform or build tools, click the install link.
 4. Run on a phone with Android 8.0+. Paste your free FRED API key in **Settings**.
+   New versions: **Git > Pull** on `main`, then Run.
 5. Tests: `./gradlew test`
    - golden test: 4,710 days must match the Python reference engine;
    - explanation test: on every day the "why" list names exactly one deciding rule, and it gives
@@ -168,7 +228,7 @@ The application ID is `fi.marketwatcher`. It installs next to the older Dip Watc
 
 ## Data
 
-`app/src/main/assets/cape_tr_shiller.json`: Robert Shiller's monthly total return CAPE and price
+`MarketWatcher-data/assets/cape_tr_shiller.json`: Robert Shiller's monthly total return CAPE and price
 from `ie_data.xls` (shillerdata.com; Data sheet columns A, B and O), 1881-01 to 2026-09. The app
 shows it from 2008; earlier months only rank values for the top-10% rule. The newest months are
 provisional (September 2026 uses the 1 September close; recent CPI is estimated). Updates: the
@@ -180,8 +240,8 @@ Data sheet's numbers.
 DGS2 and T10Y2Y are fetched from January 2007 so History shows them from 2008; a cache that
 doesn't reach back far enough is backfilled once. Each refresh is 9 FRED requests.
 
-`app/src/main/assets/replay_2007_2026.json` holds S&P 500, VIX, VIX3M and NFCI (with the NFCI
-week date) from 2007-01-03 to 2026-09-22 (FRED keeps only ~10 years of S&P 500 data). Live FRED
+`MarketWatcher-data/assets/replay_2007_2026.json` holds S&P 500, VIX, VIX3M and NFCI (with the NFCI
+week date and the values 1, 4 and 8 weeks earlier; the 8-week column was added in 0.15) from 2007-01-03 to 2026-09-22 (FRED keeps only ~10 years of S&P 500 data). Live FRED
 data is appended after the last bundled date. Sahm rule, 2-year yield and Buffett ratio are
 added to every day from FRED, using each value only from its publication date. Several series
 are copyrighted: keep the app and data for personal use.

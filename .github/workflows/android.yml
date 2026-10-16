@@ -1,0 +1,38 @@
+# Builds the app and runs the unit tests on every pull request and on main.
+# The market data comes from the private MarketWatcher-data repository through the DATA_TOKEN
+# secret (a read-only token). Without it the build still runs and the data-based tests are skipped.
+name: Build and test
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: MarketWatcher
+      - name: Private data
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          repository: tapio-t/MarketWatcher-data
+          path: MarketWatcher-data
+          token: ${{ secrets.DATA_TOKEN }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests and debug build
+        working-directory: MarketWatcher
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleDebug
+      - name: Test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: MarketWatcher/app/build/reports/tests/
