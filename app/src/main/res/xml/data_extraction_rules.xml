@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+: what Google backup and device-to-device transfer may copy.
+  Backups stay ON on purpose: Android keeps only the most recent backup, so the next nightly backup
+  replaces any older one that still held the plain-text API key (versions up to 0.10).
+  Excluded: the encrypted key, and the settings file that held the old plain-text key.
+  (The Keystore key itself is never backed up, so a copied ciphertext is useless elsewhere.)
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="marketwatcher_secrets.xml" />
+        <exclude domain="sharedpref" path="marketwatcher_settings.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="marketwatcher_secrets.xml" />
+        <exclude domain="sharedpref" path="marketwatcher_settings.xml" />
+    </device-transfer>
+</data-extraction-rules>
