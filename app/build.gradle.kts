@@ -126,6 +126,8 @@ android {
     buildTypes {
         // Device tests run against this separate app ("MarketWatcher test", fi.marketwatcher.test), so they
         // never touch the everyday app's API key, settings or data: ./gradlew connectedInstrumentedAndroidTest
+        // AGP 9 runs unit tests only for the tested build type, so they are testInstrumentedUnitTest
+        // (same code and settings as debug).
         create("instrumented") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".test"
@@ -146,10 +148,10 @@ android {
 
     marketData?.let { data ->
         sourceSets {
-            getByName("main") { assets.srcDir(data.resolve("assets")) }
+            getByName("main") { assets.directories.add(data.resolve("assets").path) }
             getByName("test") {
-                resources.srcDir(data.resolve("test-resources"))
-                resources.srcDir(data.resolve("assets"))
+                resources.directories.add(data.resolve("test-resources").path)
+                resources.directories.add(data.resolve("assets").path)
             }
         }
     }
