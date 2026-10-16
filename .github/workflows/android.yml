@@ -23,7 +23,11 @@ jobs:
           MARKETWATCHER_REQUIRE_DATA: 'true'
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug assembleInstrumentedAndroidTest
+          set -o pipefail
+          ./gradlew testDebugUnitTest assembleDebug assembleInstrumentedAndroidTest 2>&1 | tee gradle.log
+      - name: Build errors
+        if: failure()
+        run: python3 .github/scripts/build_errors.py gradle.log
       - name: Test summary
         if: always()
         run: python3 .github/scripts/test_summary.py app/build/test-results/testDebugUnitTest
