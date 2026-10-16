@@ -2,6 +2,20 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.17 (16.10.2026)
+- All market data is in the app again after Git > Pull and Run, with no separate clone: the build
+  downloads the files named in `market-data.properties` (commit and sha256 of each) from the
+  private MarketWatcher-data repository once, with a read-only token in `local.properties`. In
+  0.16 a build without a MarketWatcher-data clone next to the project silently lost the
+  2007–2016 history and the CAPE file.
+- A build without the data says so: a Gradle warning, and one line in History and Settings.
+- "First wave fading" is now "This wave fading" (state name, its description, the "why" list
+  and the VIX / VIX3M info text). Engine and golden data unchanged.
+- Device tests run against a separate app, "MarketWatcher test" (`fi.marketwatcher.test`), so they
+  no longer clear the everyday app's API key and settings: `connectedInstrumentedAndroidTest`.
+- GitHub build: requires the data, prints a test summary on the pull request, also compiles the
+  device tests, and uses current versions of the actions.
+
 ## 0.16 (16.10.2026)
 - The S&P 500 close no longer waits for VIX: FRED adds it about 03:00 Helsinki time, VIX/VIX3M
   about 16:40 the next day. Price-only days update the day change, S&P 500 and Trend tiles; the

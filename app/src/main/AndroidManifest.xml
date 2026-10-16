@@ -9,7 +9,7 @@
     </queries>
 
     <application
-        android:label="MarketWatcher"
+        android:label="${appLabel}"
         android:icon="@android:drawable/ic_menu_compass"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:allowBackup="true"

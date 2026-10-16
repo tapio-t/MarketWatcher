@@ -49,7 +49,7 @@ enum class State(val title: String, val message: String) {
     PULLBACK("Pullback", "A routine pullback. Declines of this size happen in most years."),
     PANIC("Panic", "Panic selling: the volatility curve is inverted or VIX is extreme. " +
         "The low may be days away or much further down."),
-    FIRST_WAVE_FADING("First wave fading", "The first wave of fear is fading and the index has " +
+    FIRST_WAVE_FADING("This wave fading", "This wave of fear is fading and the index has " +
         "stopped making new lows. In 2008-2026 about 4 in 10 of these were followed by another leg down."),
     NEW_WAVE("New wave", "Fear has returned after it faded: a new VIX high or a new low " +
         "in a downtrend. The earlier fading did not hold."),

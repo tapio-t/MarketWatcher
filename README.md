@@ -10,7 +10,7 @@ Not investment advice.
   - App name, and "Data checked 08:45 02.10.2026": when FRED was last downloaded (the date of
     each value is under its tile). Opening or returning to the app downloads only if that is over
     30 minutes ago; pull down to download now.
-  - States: Panic, First wave fading, New wave, Bear grind, Pullback, Uptrend restored, and
+  - States: Panic, This wave fading, New wave, Bear grind, Pullback, Uptrend restored, and
     **No panic** (not in a dip; called "Calm" before 0.12, internal name `CALM`).
   - "Suggested: <State>" box. Tap it to see why: the engine's rules in checking order, each
     marked ✓ (decided), ✗ (checked, not met) or · (not reached), with that day's numbers.
@@ -184,16 +184,28 @@ together once your Android Studio supports AGP 9.1.1.
 - **MarketWatcher-data (private):** the market data the app ships with, which is copyrighted
   (S&P Dow Jones Indices, Cboe) and so not published here: `assets/replay_2007_2026.json`,
   `assets/cape_tr_shiller.json`, `test-resources/golden_v4.json`, and the Python backtest's
-  input files in `python-data/`. Clone it **next to** this project:
+  input files in `python-data/`.
+- **The build fetches the data itself** (since 0.17). `market-data.properties` names the
+  MarketWatcher-data commit this version uses and the sha256 of each file it needs (no data).
+  At sync and build time, `app/build.gradle.kts` checks `.gradle/marketwatcher-data/<commit>/`
+  and downloads missing files once through the GitHub API, then works offline. Access is a
+  read-only token in `local.properties` (kept out of git by `.gitignore`):
 
   ```
-  AndroidStudioProjects/
-  ├── MarketWatcher/        (this repository)
-  └── MarketWatcher-data/   (private)
+  marketwatcher.dataToken=github_pat_…
   ```
 
-  The build adds its folders (`app/build.gradle.kts`, `sourceSets`). Without it the app still
-  builds and runs with FRED's ~10 years only, and the data-based unit tests are skipped.
+  Make it on GitHub under **Settings > Developer settings > Fine-grained tokens**: only the
+  MarketWatcher-data repository, **Contents: Read-only**. A wrong, expired or unauthorised token,
+  no network or a wrong checksum stops the build with the reason. Without a token the app still
+  builds and runs with FRED's ~10 years only (History and Settings then say so), and the
+  data-based unit tests are skipped. The GitHub build uses the `DATA_TOKEN` secret and requires
+  the data.
+- **Engine work** with a local clone: `marketwatcher.dataDir=../MarketWatcher-data` in
+  `local.properties` uses that folder instead (the build warns about files that differ from
+  `market-data.properties`). The Python backtest reads `../MarketWatcher-data` (or
+  `MARKETWATCHER_DATA`). After the data changes, commit it in MarketWatcher-data and update the
+  commit and checksums in `market-data.properties` in the same pull request.
 - **Every change** comes as a pull request with a version bump and a `CHANGELOG.md` entry. GitHub
   builds it and runs the unit tests (`.github/workflows/android.yml`); `main` accepts a merge
   only when that build passes. Each merged version is tagged (`v0.16`, …).
@@ -202,14 +214,15 @@ together once your Android Studio supports AGP 9.1.1.
 
 1. In Android Studio: **File > New > Project from Version Control**, URL
    `https://github.com/tapio-t/MarketWatcher`. If Git is missing, Android Studio offers to
-   download and install it. Clone `MarketWatcher-data` the same way into the same parent folder.
+   download and install it.
 2. **Settings > Build, Execution, Deployment > Build Tools > Gradle**:
    *Distribution* = **Wrapper**, *Gradle JDK* = the bundled **jbr** (or any JDK 17+).
 3. Let the first sync finish (it downloads Gradle 9.3.1 and the libraries). If it reports a
    missing SDK platform or build tools, click the install link.
-4. Run on a phone with Android 8.0+. Paste your free FRED API key in **Settings**.
+4. Once: add `marketwatcher.dataToken=…` to `local.properties` (see Repositories and data).
+5. Run on a phone with Android 8.0+. Paste your free FRED API key in **Settings**.
    New versions: **Git > Pull** on `main`, then Run.
-5. Tests: `./gradlew test`
+6. Tests: `./gradlew test`
    - golden test: 4,710 days must match the Python reference engine;
    - explanation test: on every day the "why" list names exactly one deciding rule, and it gives
      the engine's state;
@@ -217,18 +230,21 @@ together once your Android Studio supports AGP 9.1.1.
      crossing below the 200-day average, switches, both test scenarios, and test channels;
    - VIX / VIX3M tile: amber on exactly the 478 days at 1.00 or above in 2008–2026;
    - redaction: API keys are removed from error texts.
-6. On a phone or emulator: `./gradlew connectedAndroidTest` checks that both notification types
+7. On a phone or emulator: `./gradlew connectedInstrumentedAndroidTest` checks that both notification types
    are high importance, the old one is gone, a test notification is posted and listed, and in
    History the VIX / VIX3M tile is amber on 24.12.2018 (1.25) and not on 22.09.2026 (0.81),
    and the key is stored only encrypted, tampering is handled, migration deletes the plain text
-   from disk, and both backup rule files exclude the key files.
+   from disk, and both backup rule files exclude the key files. These tests run against a
+   separate app, **MarketWatcher test** (`fi.marketwatcher.test`, build type `instrumented`),
+   because they clear the API key and settings; the everyday app is not touched. Uninstall
+   MarketWatcher test afterwards if you like.
 
 The application ID is `fi.marketwatcher`. It installs next to the older Dip Watch app
 (`fi.dipwatch`), which you can uninstall; enter the FRED key once in MarketWatcher.
 
 ## Data
 
-`MarketWatcher-data/assets/cape_tr_shiller.json`: Robert Shiller's monthly total return CAPE and price
+MarketWatcher-data `assets/cape_tr_shiller.json`: Robert Shiller's monthly total return CAPE and price
 from `ie_data.xls` (shillerdata.com; Data sheet columns A, B and O), 1881-01 to 2026-09. The app
 shows it from 2008; earlier months only rank values for the top-10% rule. The newest months are
 provisional (September 2026 uses the 1 September close; recent CPI is estimated). Updates: the
@@ -240,7 +256,7 @@ Data sheet's numbers.
 DGS2 and T10Y2Y are fetched from January 2007 so History shows them from 2008; a cache that
 doesn't reach back far enough is backfilled once. Each refresh is 9 FRED requests.
 
-`MarketWatcher-data/assets/replay_2007_2026.json` holds S&P 500, VIX, VIX3M and NFCI (with the NFCI
+MarketWatcher-data `assets/replay_2007_2026.json` holds S&P 500, VIX, VIX3M and NFCI (with the NFCI
 week date and the values 1, 4 and 8 weeks earlier; the 8-week column was added in 0.15) from 2007-01-03 to 2026-09-22 (FRED keeps only ~10 years of S&P 500 data). Live FRED
 data is appended after the last bundled date. Sahm rule, 2-year yield and Buffett ratio are
 added to every day from FRED, using each value only from its publication date. Several series

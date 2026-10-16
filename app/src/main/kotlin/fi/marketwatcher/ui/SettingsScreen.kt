@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
+import fi.marketwatcher.data.BundledData
 import fi.marketwatcher.data.CapeHistory
 import fi.marketwatcher.data.CapeUpdater
 import fi.marketwatcher.data.Settings
@@ -252,8 +253,11 @@ private fun Body(t: String) =
 
 @Composable
 private fun DataSources() {
+    val ctx = LocalContext.current
+    val dataMissing = remember { BundledData.isMissing(ctx) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Sub("Bundled history (inside the app)")
+        if (dataMissing) Text(BundledData.MISSING_TEXT, fontSize = 13.sp, lineHeight = 18.sp, color = palette().warn)
         Body("replay_2007_2026.json: 4,961 trading days from 03.01.2007 to 22.09.2026. Each day has:\n" +
             "• S&P 500 close: 2007–2016 from a public copy of Yahoo Finance daily closes (FRED keeps only about " +
             "10 years; the copy matches FRED within 0.002% where both exist), from 2016 FRED SP500.\n" +

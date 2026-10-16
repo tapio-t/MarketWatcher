@@ -7,6 +7,9 @@ repository on LinkedIn.
 ## How Tapio works
 - He usually asks for a **proposal first** ("propose, don't implement"). Show the plan (and code
   when asked), then wait for **"Implement"**.
+- End every reply that needs his input with a numbered list **"Questions that need your
+  answering before implementation"**, each with a suggested answer, so he can reply briefly
+  (e.g. "1 yes, 2 no, Implement").
 - Every change goes on a branch `vX.Y-<topic>` and comes as a **pull request**. Tapio merges; never
   push to `main`. After he merges, tag `vX.Y` on the merge commit.
 - In each pull request: raise `versionCode`/`versionName` in `app/build.gradle.kts`, add a
@@ -29,14 +32,22 @@ repository on LinkedIn.
 - `app/.../engine/SignalEngine.kt` is a line-by-line port of `python/engine_v4.py`. Change both.
 - Regenerate the golden data with `python python/backtest_v4.py --golden` (writes
   `../MarketWatcher-data/test-resources/golden_v4.json`) and commit it in MarketWatcher-data.
-  `SignalEngineGoldenTest` must report 0 mismatches over 4,710 days (2008–2026).
+  Then update the commit and the sha256 values in `market-data.properties` in the same pull
+  request. For local work, `marketwatcher.dataDir=../MarketWatcher-data` in `local.properties`.
+  `SignalEngineGoldenTest` must pass: it fails on the first day that differs over the 4,710 days
+  (2008–2026). Check the "Unit tests" summary notes on the GitHub build (none skipped).
 
 ## Background
-- Decisions, open ideas, prototype links and the full archive of the earlier work: `../MarketWatcher-data/NOTES.md`.
+- Decisions, open ideas, prototype links and the full archive of the earlier work: `NOTES.md` in
+  the private MarketWatcher-data repository (clone it next to this one to read it).
 
 ## Data and secrets
 - Copyrighted market data (S&P 500, VIX, NFCI history, Shiller CAPE, golden data, backtest CSVs)
-  lives only in the private `tapio-t/MarketWatcher-data` repository, cloned next to this one. Never
-  add data files to this public repository (`.gitignore` blocks the usual paths).
-- The FRED API key is only on the phone (Android Keystore). Never put keys, keystores or
+  lives only in the private `tapio-t/MarketWatcher-data` repository. The build downloads the files
+  named in `market-data.properties` with a read-only token (`marketwatcher.dataToken` in
+  `local.properties`; `DATA_TOKEN` secret on GitHub). Never add data files to this public
+  repository (`.gitignore` blocks the usual paths).
+- Device tests clear the API key and settings: they run against the separate app
+  `fi.marketwatcher.test` (build type `instrumented`), never the everyday `fi.marketwatcher`.
+- The FRED API key is only on the phone (Android Keystore). Never put keys, tokens, keystores or
   `local.properties` in the repository.

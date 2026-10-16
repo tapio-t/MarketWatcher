@@ -52,7 +52,7 @@ object Explain {
                     "${r.episodeMaxDd?.let { pct(it) } ?: "—"} (needs −10%); panic today: ${yes(t.panicNow)}",
 
             Triple(Branch.FADING, State.FIRST_WAVE_FADING,
-                "First wave fading: panic seen, VIX ≤ 80% of its dip peak, curve not inverted " +
+                "This wave fading: panic seen, VIX ≤ 80% of its dip peak, curve not inverted " +
                     "(or 0.15 below its peak), no new low for 3 days, 2% or more off the low") to
                 if (!t.hadPanic) "No panic seen yet in this dip"
                 else "VIX at ${peak?.let { "${Math.round(r.vix / it * 100)}% of its peak ${f1(it)}" } ?: "—"}; " +
