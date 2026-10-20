@@ -43,7 +43,7 @@ class NotifierDeviceTest {
     }
 
     @Test fun testNoticeIsPostedAndListed() {
-        val now = NotificationRules.Now("2026-09-22", State.CALM, emptySet(), emptyList(), 100.0, 95.0)
+        val now = NotificationRules.Now("2026-09-22", State.CALM, emptySet(), emptyMap(), 100.0, 95.0)
         val notices = NotificationRules.test(NotificationRules.Kind.BELOW_SMA, now)
         assertEquals(1, notices.size)
         assertEquals(null, Notifier.blocked(ctx, NotificationRules.CHANNEL_BELOW_SMA))

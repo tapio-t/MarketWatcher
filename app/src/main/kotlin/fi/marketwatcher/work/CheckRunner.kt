@@ -30,6 +30,8 @@ object CheckRunner {
         val text = when {
             notices.isEmpty() -> "No change ($data)."
             o.held.isNotEmpty() -> "Held until 08:00: ${o.held.joinToString("; ") { it.title }} ($data)."
+            o.removed.isNotEmpty() -> "Notified: ${o.shown.joinToString("; ") { it.title }} ($data). " +
+                Notifier.removedText(ctx)
             o.shown.isNotEmpty() -> "Notified: ${o.shown.joinToString("; ") { it.title }} ($data)."
             else -> "Had ${notices.size} notification(s) to send, but: ${o.blocked?.message ?: "posting failed."}"
         }

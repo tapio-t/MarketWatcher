@@ -130,13 +130,23 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
         scope.launch {
             // Posting is asynchronous: look for up to 2 seconds before reporting "not shown".
             var delivery = posted.map { Notifier.Delivery.NOT_LISTED }
-            for (attempt in 1..8) {
-                delay(250)
+            var waited = 0L
+            while (waited < Notifier.RECHECK_MS) {
+                delay(250); waited += 250
                 delivery = posted.map { Notifier.delivery(ctx, it.id) }
                 if (delivery.none { it == Notifier.Delivery.NOT_LISTED }) break
             }
+            val listed = delivery.none { it == Notifier.Delivery.NOT_LISTED }
+            // Another app (e.g. a launcher's notification filter) may remove it a moment later: look again.
+            if (listed) {
+                delay((Notifier.RECHECK_MS - waited).coerceAtLeast(0))
+                delivery = posted.map { Notifier.delivery(ctx, it.id) }
+            }
+            val removedText = if (listed && delivery.any { it == Notifier.Delivery.NOT_LISTED })
+                withContext(Dispatchers.IO) { Notifier.removedText(ctx) } else null
             val off = if (!switchOn(kind)) " This switch is off, so real notifications of this kind are not sent." else ""
             results[kind] = when {
+                removedText != null -> TestResult("Posted and shown, but then removed. $removedText$off")
                 delivery.all { it == Notifier.Delivery.SHOWN } -> TestResult(
                     "Shown: ${posted.size} test notification${if (posted.size > 1) "s" else ""} " +
                         "with data from ${dmy(p.date)}.$off")

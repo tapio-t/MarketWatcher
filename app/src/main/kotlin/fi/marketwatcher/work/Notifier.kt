@@ -4,7 +4,9 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -81,6 +83,7 @@ object Notifier {
                     .setPriority(NotificationCompat.PRIORITY_HIGH)   // banners on Android 7.1 and older style
                     .setCategory(NotificationCompat.CATEGORY_STATUS)
                     .setAutoCancel(true)
+                    .setContentIntent(openApp(ctx))
                     // On a locked screen show only "MarketWatcher: market update" until the phone is unlocked.
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                     .setPublicVersion(NotificationCompat.Builder(ctx, channel)
@@ -93,6 +96,47 @@ object Notifier {
         } catch (e: SecurityException) {
             false   // permission revoked between the check and the post
         }
+    }
+
+    /** Tapping a notification opens MarketWatcher (or brings it to the front). */
+    private fun openApp(ctx: Context): PendingIntent? {
+        val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return null
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        return PendingIntent.getActivity(ctx, 0, launch,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** How long after posting a notification is checked again: another app may remove it at once. */
+    const val RECHECK_MS = 2000L
+
+    /**
+     * Blocking (call off the main thread): waits [RECHECK_MS] and returns the notices Android no
+     * longer lists. On 20.10.2026 a launcher's notification filter removed one after 0.24 s.
+     */
+    fun removedSoonAfterPosting(ctx: Context, posted: List<NotificationRules.Notice>): List<NotificationRules.Notice> {
+        if (posted.isEmpty()) return emptyList()
+        Thread.sleep(RECHECK_MS)
+        return posted.filter { delivery(ctx, it.id) == Delivery.NOT_LISTED }
+    }
+
+    /**
+     * The apps allowed to read and remove other apps' notifications (Android settings:
+     * "Notification read, reply and control"), by name. One of them removed a missing notification.
+     */
+    fun listenerApps(ctx: Context): List<String> {
+        val pm = ctx.packageManager
+        return NotificationManagerCompat.getEnabledListenerPackages(ctx)
+            .filter { it != ctx.packageName }
+            .map { pkg -> runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg) }
+            .sorted()
+    }
+
+    /** One sentence for "Last background check" and the Test result when another app removed a notification. */
+    fun removedText(ctx: Context): String {
+        val apps = listenerApps(ctx)
+        return "Another app removed it within ${RECHECK_MS / 1000} seconds" +
+            (if (apps.isEmpty()) "." else ". Apps allowed to remove notifications: ${apps.joinToString(", ")}.") +
+            " Allow MarketWatcher in that app's notification filter."
     }
 
     /** Whether Android lists notification [id] as active, and whether Do Not Disturb may hide it. */

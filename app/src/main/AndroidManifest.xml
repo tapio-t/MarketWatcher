@@ -6,6 +6,10 @@
     <!-- Only to notice the old Dip Watch app (which still holds the API key in plain text) and offer to uninstall it. -->
     <queries>
         <package android:name="fi.dipwatch" />
+        <!-- To name the apps that may remove notifications when one disappears (Settings, last check). -->
+        <intent>
+            <action android:name="android.service.notification.NotificationListenerService" />
+        </intent>
     </queries>
 
     <application
@@ -25,5 +29,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- The 08:00 alarm that shows notifications held overnight (work/NotificationGate.kt). -->
+        <receiver android:name=".work.DeliverHeldReceiver" android:exported="false" />
     </application>
 </manifest>

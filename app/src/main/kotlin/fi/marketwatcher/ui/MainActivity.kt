@@ -153,7 +153,7 @@ private fun App(repo: SignalRepository, settings: Settings) {
                 checkedAt = settings.lastDownloadAt   // includes downloads by the background check
                 refreshIfDue()
                 // Inside 08:00–18:00: show any notifications held overnight now, not only at 08:00.
-                activity?.applicationContext?.let { app -> scope.launch(Dispatchers.IO) { runCatching { NotificationGate.flush(app) } } }
+                activity?.applicationContext?.let { app -> scope.launch(Dispatchers.IO) { runCatching { NotificationGate.flushAndRecord(app) } } }
             }
         }
         lifecycle?.addObserver(observer)
