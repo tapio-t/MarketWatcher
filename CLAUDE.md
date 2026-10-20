@@ -18,6 +18,30 @@ repository on LinkedIn.
 - Wait for the GitHub build (`.github/workflows/android.yml`) and fix failures before asking him
   to review.
 
+## Tools
+- Claude Code in Android Studio (official Claude Code [Beta] plugin): code changes, backtests,
+  engine research, pull requests.
+- Claude in the browser or the desktop app: conversations, prototypes (artifacts) and market
+  research. Decisions from there are brought back to Claude Code and recorded in NOTES.md
+  (MarketWatcher-data) with the date; prototype links go under "Published prototypes".
+
+## Session start
+- If `../MarketWatcher-data` is missing, clone https://github.com/tapio-t/MarketWatcher-data
+  next to this project; otherwise `git pull` it. Read its NOTES.md before proposing changes.
+
+## Builds and tests
+- Rely on the GitHub build ("Build and test") by default. Read the result with gh:
+  `gh pr checks`, the notes (test summary, Gradle errors) with
+  `gh api repos/tapio-t/MarketWatcher/check-runs/<id>/annotations`, and failures with
+  `gh run view <run> --log-failed`.
+- Build locally only to install on Tapio's phone or to debug a failure the notes don't explain.
+  The computer is not powerful: no parallel or repeated local builds.
+- To install on the phone, Tapio presses Run in Android Studio. Suggest `gradlew installDebug`
+  only when he asks.
+- Never use an emulator. Device tests run on Tapio's phone over USB (`adb devices` first):
+  `gradlew connectedInstrumentedAndroidTest`, which installs the separate MarketWatcher test app
+  (`fi.marketwatcher.test`), never the everyday app.
+
 ## Product rules
 - No buy or sell signals or wording anywhere (a test checks the "What happened" notes).
   "Not investment advice."
@@ -39,7 +63,7 @@ repository on LinkedIn.
 
 ## Background
 - Decisions, open ideas, prototype links and the full archive of the earlier work: `NOTES.md` in
-  the private MarketWatcher-data repository (clone it next to this one to read it).
+  the private MarketWatcher-data repository (see Session start).
 
 ## Data and secrets
 - Copyrighted market data (S&P 500, VIX, NFCI history, Shiller CAPE, golden data, backtest CSVs)
