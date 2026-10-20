@@ -276,11 +276,6 @@ class SignalRepository(private val context: Context) {
         /** True when the close is below the 200-day average, null before the average exists. */
         fun belowSma(r: Reading): Boolean? = r.sma200?.let { r.spx < it }
 
-        fun flagsOf(r: Reading): Set<String> = buildSet {
-            if (r.context.creditStress == true) add("Credit stress")
-            if (r.context.recession == true) add("Recession")
-            if (r.context.rateShock == true) add("Rate shock")
-            if (r.context.valuationHigh == true) add("High valuation")
-        }
+        fun flagsOf(r: Reading): Set<String> = fi.marketwatcher.work.NotificationRules.flagsOn(r.context).toSet()
     }
 }

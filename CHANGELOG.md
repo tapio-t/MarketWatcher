@@ -2,6 +2,19 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.19 (20.10.2026)
+- Notifications held overnight are shown at 08:00 even while the phone sleeps: an Android alarm
+  (allowed while idle, may be a few minutes late) next to the WorkManager job, which stays as a
+  backup. On 20.10.2026 the job waited until the phone was woken at 08:06.
+- If another app removes a notification right after it is shown, "Last background check" says so
+  and names the apps allowed to remove notifications. On 20.10.2026 a launcher's notification
+  filter removed "Economy: Rate shock" after 0.24 s, so it never reached the notification shade.
+- Settings > Test checks again 2 seconds after posting, so a notification another app removes is
+  no longer reported as "Shown".
+- The economy notification shows only the note of the flag that just turned on, not every
+  economy note.
+- Tapping a notification opens MarketWatcher.
+
 ## 0.18 (20.10.2026)
 - No changes to the app. CLAUDE.md records the way of working: which Claude tool is used for
   what, the GitHub build as the default check (read with gh), local builds only to install on

@@ -40,7 +40,10 @@ repository on LinkedIn.
   only when he asks.
 - Never use an emulator. Device tests run on Tapio's phone over USB (`adb devices` first):
   `gradlew connectedInstrumentedAndroidTest`, which installs the separate MarketWatcher test app
-  (`fi.marketwatcher.test`), never the everyday app.
+  (`fi.marketwatcher.test`), never the everyday app. Before running, ask Tapio to unlock the
+  phone (screen tests fail when it is locked). Minimalist Launcher's notification filter stays on:
+  MarketWatcher is on its allowed list, but the test app is reinstalled on every run and can't be,
+  so `NotifierDeviceTest` skips its "still listed" check when another app removes the notification.
 
 ## Product rules
 - No buy or sell signals or wording anywhere (a test checks the "What happened" notes).

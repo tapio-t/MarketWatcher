@@ -1,5 +1,6 @@
 package fi.marketwatcher.work
 
+import fi.marketwatcher.engine.Context
 import fi.marketwatcher.engine.Explain
 import fi.marketwatcher.engine.Fall
 import fi.marketwatcher.engine.PriceView
@@ -22,7 +23,7 @@ object NotificationRules {
     )
 
     /**
-     * Today's values that the rules look at. State, flags and notes come from the newest full
+     * Today's values that the rules look at. State, flags and [flagNotes] come from the newest full
      * reading; [date], [spx], [sma] and [prevClose] from the newest S&P 500 close, which may be a
      * price-only day (VIX not published yet).
      */
@@ -30,7 +31,8 @@ object NotificationRules {
         val date: String,
         val state: State,
         val flags: Set<String>,
-        val notes: List<String>,
+        /** Each economy flag that is on, with its note from the engine (see [flagNotes]). */
+        val flagNotes: Map<String, String>,
         val spx: Double,
         val sma: Double?,
         val prevClose: Double? = null,
@@ -73,9 +75,18 @@ object NotificationRules {
 
     private val QUIET = setOf(State.CALM, State.PULLBACK)
 
+    /** The economy flags that are on, in the engine's note order. */
+    fun flagsOn(c: Context): List<String> = listOf(
+        "Credit stress" to c.creditStress, "Recession" to c.recession,
+        "Rate shock" to c.rateShock, "High valuation" to c.valuationHigh,
+    ).filter { it.second == true }.map { it.first }
+
+    /** Each flag that is on, with its note: the engine adds one note per flag, in the same order. */
+    fun flagNotes(c: Context): Map<String, String> = flagsOn(c).zip(c.notes).toMap()
+
     /** [price]: the newest S&P 500 close (a price-only day when VIX is not published yet). */
     fun now(r: Reading, flags: Set<String>, price: PriceView = r.price()) =
-        Now(price.date, r.state, flags, r.context.notes, price.close, price.sma200, price.prevClose, price.prevDate)
+        Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate)
 
     /**
      * Real rules:
@@ -94,7 +105,9 @@ object NotificationRules {
             val newFlags = now.flags - prev.flags
             if (newFlags.isNotEmpty()) {
                 add(Notice(ID_ECONOMY, "Economy: " + newFlags.sorted().joinToString(", "),
-                    now.notes.joinToString(" ").ifBlank { "An economy flag turned on." }))
+                    // Only the notes of the flags that just turned on; the others are in the app.
+                    newFlags.sorted().mapNotNull { now.flagNotes[it] }.joinToString(" ")
+                        .ifBlank { "An economy flag turned on." }))
             }
         }
         if (notifyBelowSma) {
@@ -131,7 +144,7 @@ object NotificationRules {
                 val prevState = if (now.state == State.PANIC) State.CALM else State.PANIC
                 val simulatedFlags = now.flags.ifEmpty { setOf("Test flag") }
                 val n = if (now.flags.isEmpty()) now.copy(flags = simulatedFlags,
-                    notes = listOf("Simulated economy flag: no real flag is on today.")) else now
+                    flagNotes = mapOf("Test flag" to "Simulated economy flag: no real flag is on today.")) else now
                 evaluate(Previous(prevState, emptySet(), null), n, notifyState = true, notifyBelowSma = false)
             }
             Kind.BELOW_SMA -> {

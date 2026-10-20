@@ -1,5 +1,6 @@
 package fi.marketwatcher.work
 
+import fi.marketwatcher.engine.Context
 import fi.marketwatcher.engine.State
 import fi.marketwatcher.work.NotificationRules.Kind
 import fi.marketwatcher.work.NotificationRules.Now
@@ -11,7 +12,7 @@ import org.junit.Test
 class NotificationRulesTest {
 
     private fun now(state: State = State.CALM, spx: Double = 100.0, sma: Double? = 95.0, flags: Set<String> = emptySet()) =
-        Now("2026-09-22", state, flags, emptyList(), spx, sma)
+        Now("2026-09-22", state, flags, flags.associateWith { "$it note." }, spx, sma)
 
     private fun ids(prev: Previous, n: Now, state: Boolean = true, sma: Boolean = true) =
         NotificationRules.evaluate(prev, n, state, sma).map { it.id }
@@ -27,6 +28,23 @@ class NotificationRulesTest {
         val n = now(flags = setOf("Recession"))
         assertEquals(listOf(NotificationRules.ID_ECONOMY), ids(Previous(State.CALM, emptySet(), false), n))
         assertTrue(ids(Previous(State.CALM, setOf("Recession"), false), n).isEmpty())
+    }
+
+    @Test fun economyNoticeShowsOnlyTheNewFlagsNotes() {
+        // Rate shock turns on while High valuation was already on (20.10.2026).
+        val n = now(flags = setOf("Rate shock", "High valuation"))
+        val notice = NotificationRules.evaluate(Previous(State.CALM, setOf("High valuation"), false), n,
+            notifyState = true, notifyBelowSma = false).single()
+        assertEquals("Economy: Rate shock", notice.title)
+        assertEquals("Rate shock note.", notice.text)
+    }
+
+    @Test fun flagNotesPairEachFlagWithItsNote() {
+        val c = Context(creditStress = false, recession = null, rateShock = true, valuationHigh = true,
+            notes = listOf("Rate shock: 2-year yield …", "Valuation is high: …"))
+        assertEquals(listOf("Rate shock", "High valuation"), NotificationRules.flagsOn(c))
+        assertEquals(mapOf("Rate shock" to "Rate shock: 2-year yield …", "High valuation" to "Valuation is high: …"),
+            NotificationRules.flagNotes(c))
     }
 
     @Test fun belowAverageNotifiesOncePerCrossing() {
@@ -78,7 +96,7 @@ class NotificationRulesTest {
     }
 
     private fun day(spx: Double, prev: Double?, date: String = "2026-10-14") =
-        Now(date, State.CALM, emptySet(), emptyList(), spx, 95.0, prevClose = prev, prevDate = "2026-10-13")
+        Now(date, State.CALM, emptySet(), emptyMap(), spx, 95.0, prevClose = prev, prevDate = "2026-10-13")
 
     private fun sharp(prev: Previous, n: Now, on: Boolean = true) =
         NotificationRules.evaluate(prev, n, notifyState = false, notifyBelowSma = false, notifySharpFall = on)
