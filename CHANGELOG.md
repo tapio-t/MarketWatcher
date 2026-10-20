@@ -2,6 +2,13 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.18 (20.10.2026)
+- No changes to the app. CLAUDE.md records the way of working: which Claude tool is used for
+  what, the GitHub build as the default check (read with gh), local builds only to install on
+  the phone or to debug, device tests on the phone over USB (no emulator), and cloning
+  MarketWatcher-data at the start of each session.
+- `gradle/gradle-daemon-jvm.properties` added: pins JVM 21 for the Gradle daemon.
+
 ## 0.17 (16.10.2026)
 - All market data is in the app again after Git > Pull and Run, with no separate clone: the build
   downloads the files named in `market-data.properties` (commit and sha256 of each) from the
