@@ -2,6 +2,15 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.20 (20.10.2026)
+- No visible changes. The History device tests pass on the phone again:
+  - Chip taps ("Today", years) first scroll the page to the chip row. The test tool's scroll only
+    moved the chip row, so after the page had scrolled down, the tap on "Today" landed above the
+    screen and the selection stayed on the earlier year.
+  - The "What happened" card and the Suggested box are compared by their full positions on the
+    page. The screen-clipped bounds gave an off-screen box a size of zero.
+  - The History chip row has a hidden test label (`chipRow`).
+
 ## 0.19 (20.10.2026)
 - Notifications held overnight are shown at 08:00 even while the phone sleeps: an Android alarm
   (allowed while idle, may be a few minutes late) next to the WorkManager job, which stays as a

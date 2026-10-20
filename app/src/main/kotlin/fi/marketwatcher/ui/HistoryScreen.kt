@@ -120,7 +120,7 @@ internal fun HistoryScreen(data: ChartData?) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()).testTag("chipRow"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = picked == TODAY_CHIP, onClick = { picked = TODAY_CHIP; select(n - 1) },
                     label = { Text("Today", fontSize = 12.sp) })
                 YEARS.forEach { y ->
