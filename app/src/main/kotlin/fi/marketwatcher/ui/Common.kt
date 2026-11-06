@@ -217,9 +217,8 @@ internal fun groupsFor(r: Reading, price: PriceView = r.price(), withDayChange: 
             Tile("2-year yield", d.dgs2?.let { fmt("%.2f%%", it) } ?: "—", dmy(d.dgs2Date),
                 r.context.rateShock == true, InfoKind.DGS2,
                 sub = dgs2Change(d)?.let { signed2(it) + " in 6 mo" }),
-            Tile("CAPE (total return)", d.cape?.let { (if (d.capeEstimated) "≈" else "") + fmt("%.1f", it) } ?: "—",
-                dmy(d.capeDate), r.context.capeHigh == true, InfoKind.CAPE,
-                sub = if (d.cape != null && d.capeEstimated) "estimate" else null),
+            Tile("CAPE (total return)", d.cape?.let { fmt("%.1f", it) } ?: "—",
+                dmy(d.capeDate), r.context.capeHigh == true, InfoKind.CAPE),
         )),
     )
 }

@@ -12,16 +12,14 @@ import java.time.YearMonth
  * Bundled: 1881-01 to 2026-09 (the app shows it from 2008; earlier months are used only to rank
  * values for the top-10% amber rule). A newer file downloaded or imported in Settings replaces it.
  *
- * Value for a day:
- *  - months before the latest official month: that month's official value;
- *  - the latest official month and later: an estimate, the latest official value scaled by the
- *    S&P 500 change since that month's price (the 10-year earnings average barely moves in a month).
+ * Value for a day: only values from the file, never estimated.
+ *  - a month the file has: that month's value;
+ *  - after the file's newest month: the newest month's value, until Shiller publishes a new file.
  */
 class CapeHistory(val months: List<Entry>, val source: String) {
     data class Entry(val month: YearMonth, val price: Double, val value: Double)
-    data class Value(val value: Double, val month: YearMonth, val estimated: Boolean, val percentile: Double)
+    data class Value(val value: Double, val month: YearMonth, val percentile: Double)
 
-    private val sortedValues = months.map { it.value }.sorted()
     /** Percentile of each month within the history up to and including it. */
     private val pct = DoubleArray(months.size).also { arr ->
         val seen = ArrayList<Double>(months.size)
@@ -35,16 +33,11 @@ class CapeHistory(val months: List<Entry>, val source: String) {
 
     val lastOfficial: Entry? get() = months.lastOrNull()
 
-    fun valueOn(date: LocalDate, spx: Double): Value? {
+    fun valueOn(date: LocalDate): Value? {
         val last = months.lastOrNull() ?: return null
         val m = YearMonth.from(date)
-        if (m < last.month) {
-            val i = index[m] ?: return null
-            return Value(months[i].value, m, estimated = false, percentile = pct[i])
-        }
-        val est = last.value * spx / last.price
-        val rank = sortedValues.count { it <= est }.toDouble() / sortedValues.size
-        return Value(est, last.month, estimated = true, percentile = rank)
+        val i = if (m < last.month) index[m] ?: return null else months.size - 1
+        return Value(months[i].value, months[i].month, percentile = pct[i])
     }
 
     fun toJson(): String = JSONObject().apply {

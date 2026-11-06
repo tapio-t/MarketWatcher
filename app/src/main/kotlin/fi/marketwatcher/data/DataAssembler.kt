@@ -70,7 +70,7 @@ object DataAssembler {
             val y = asofIndex(y2, t)
             val y6 = asofIndex(y2, t.minusDays(182))
             val c = asofIndex(yc, t)
-            val cv = cape?.valueOn(t, d.spx)
+            val cv = cape?.valueOn(t)
             val nfciPart = if (keepNfci) d else d.copy(
                 nfci = if (n >= 1) nf[n].value else null,
                 nfciPrev = if (n >= 1) nf[n - 1].value else null,
@@ -93,7 +93,6 @@ object DataAssembler {
                 t10y2yLastInverted = if (c >= 0 && yc[c].value >= 0) ycLastNeg[c] else null,
                 cape = cv?.value,
                 capeDate = cv?.month?.atDay(1)?.toString(),
-                capeEstimated = cv?.estimated ?: false,
                 capePct = cv?.percentile,
                 buffett = if (b >= 0) bu[b].value else null,
                 buffettPct = if (b >= 0) buPct[b] else null,
