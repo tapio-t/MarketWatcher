@@ -76,7 +76,11 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
                 "Tiers: −2% Sharp fall, −3% Very sharp fall, −5% Extreme fall. Close ${fmt("%,.0f", p.close)} on " +
                 "${dmy(p.date)}, previous close ${p.prevClose?.let { fmt("%,.0f", it) } ?: "—"} on ${dmy(p.prevDate)}. " +
                 "FRED adds the close about 03:00 Helsinki time; the \"Sharp falls\" notification is shown at 08:00 at " +
-                "the earliest. Display only; it does not change the suggested state."
+                "the earliest. Display only; it does not change the suggested state." +
+                (if (p.estimated) " This close is an estimate: FRED's last close scaled by VOO's change since that day " +
+                    "(Alpha Vantage). FRED's close replaces it when published." else "") +
+                (if (p.exDividend) " Ex-dividend day: VOO's dividend is added back when its amount is known, because VOO's price drops by it and " +
+                    "the index does not." else "")
             Info("Day change", p.change?.let { signedPct2(it) } ?: "—", p.date, explanation, inApp,
                 p.fall != null, URL_SPX_CHART, flagName = p.fall?.title ?: "Sharp fall")
         }

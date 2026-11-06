@@ -8,7 +8,7 @@ import fi.marketwatcher.engine.price
 
 /** One background check: download, apply [NotificationRules], show or hold the notices, describe it. */
 object CheckRunner {
-    /** [text] goes to "Last background check"; [priceDate] is the newest S&P 500 close found. */
+    /** [text] goes to "Last background check"; [priceDate] is the newest S&P 500 close from FRED (not an estimate). */
     data class Outcome(val text: String, val priceDate: String?)
 
     /** [priceOnly]: the early check, which downloads only the S&P 500. Blocking: call off the main thread. */
@@ -23,8 +23,9 @@ object CheckRunner {
             NotificationRules.now(today, r.flags, price),
             notifyState = settings.notifications, notifyBelowSma = settings.notifyBelowSma,
             notifySharpFall = settings.notifySharpFall)
+        val est = if (price.estimated) " (estimate from VOO)" else ""
         val data = if (price.date != today.date)
-            "S&P 500 to ${Explain.dmy(price.date)}, VIX to ${Explain.dmy(today.date)}, ${today.label}"
+            "S&P 500 to ${Explain.dmy(price.date)}$est, VIX to ${Explain.dmy(today.date)}, ${today.label}"
         else "data from ${Explain.dmy(today.date)}, ${today.label}"
         val o = NotificationGate.deliver(ctx, notices)
         val text = when {
@@ -35,6 +36,7 @@ object CheckRunner {
             o.shown.isNotEmpty() -> "Notified: ${o.shown.joinToString("; ") { it.title }} ($data)."
             else -> "Had ${notices.size} notification(s) to send, but: ${o.blocked?.message ?: "posting failed."}"
         }
-        return Outcome((if (priceOnly) "Early check (S&P 500 only): " else "") + text, price.date)
+        // The early check keeps retrying until FRED has the close, even when VOO already gave an estimate.
+        return Outcome((if (priceOnly) "Early check (S&P 500 only): " else "") + text, r.fredPriceDate)
     }
 }

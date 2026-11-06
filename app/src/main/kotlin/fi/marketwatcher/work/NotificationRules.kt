@@ -37,6 +37,10 @@ object NotificationRules {
         val sma: Double?,
         val prevClose: Double? = null,
         val prevDate: String? = null,
+        /** [spx] is estimated from VOO (FRED has not published the close yet). */
+        val estimated: Boolean = false,
+        /** An estimated day that is a VOO ex-dividend day. */
+        val exDividend: Boolean = false,
     ) {
         val belowSma: Boolean? get() = sma?.let { spx < it }
         val change: Double? get() = prevClose?.let { spx / it - 1 }
@@ -86,7 +90,15 @@ object NotificationRules {
 
     /** [price]: the newest S&P 500 close (a price-only day when VIX is not published yet). */
     fun now(r: Reading, flags: Set<String>, price: PriceView = r.price()) =
-        Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate)
+        Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate,
+            price.estimated, price.exDividend)
+
+    /** " (estimate)" after a price notification's title when the close is estimated from VOO. */
+    private fun Now.mark() = if (estimated) " (estimate)" else ""
+
+    /** The note at the start of an estimated price notification. */
+    private fun Now.estimateNote() = if (!estimated) "" else
+        "Estimated from VOO; FRED has not published the close yet." + (if (exDividend) " Ex-dividend day." else "") + " "
 
     /**
      * Real rules:
@@ -113,8 +125,8 @@ object NotificationRules {
         if (notifyBelowSma) {
             val sma = now.sma
             if (now.belowSma == true && prev.belowSma != true && sma != null) {
-                add(Notice(ID_BELOW_SMA, "S&P 500 is below its 200-day average",
-                    String.format(Locale.US, "Close %,.0f on %s is %.1f%% below the 200-day average %,.0f. %s",
+                add(Notice(ID_BELOW_SMA, "S&P 500 is below its 200-day average" + now.mark(),
+                    now.estimateNote() + String.format(Locale.US, "Close %,.0f on %s is %.1f%% below the 200-day average %,.0f. %s",
                         now.spx, Explain.dmy(now.date), (1 - now.spx / sma) * 100, sma, now.state.label)))
             }
         }
@@ -122,8 +134,8 @@ object NotificationRules {
             val ch = now.change
             val fall = ch?.let { Fall.of(it) }
             if (fall != null && now.date != prev.sharpFallDate) {
-                add(Notice(ID_SHARP_FALL, "${fall.title}: S&P 500 ${pct2(ch)} on ${Explain.dmy(now.date)}",
-                    String.format(Locale.US, "Close %,.0f, previous close %,.0f on %s. ", now.spx, now.prevClose, Explain.dmy(now.prevDate)) +
+                add(Notice(ID_SHARP_FALL, "${fall.title}${now.mark()}: S&P 500 ${pct2(ch)} on ${Explain.dmy(now.date)}",
+                    now.estimateNote() + String.format(Locale.US, "Close %,.0f, previous close %,.0f on %s. ", now.spx, now.prevClose, Explain.dmy(now.prevDate)) +
                         "Tiers: −2% sharp, −3% very sharp, −5% extreme. In 2008–2026 the S&P 500 fell 2% or more on about 4% of days."))
             }
         }

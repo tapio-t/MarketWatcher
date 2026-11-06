@@ -17,15 +17,23 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * The FRED API key, encrypted with AES-256-GCM. The AES key lives in Android Keystore (secure
+ * An API key ([Slot]: FRED, or the optional Alpha Vantage key), encrypted with AES-256-GCM. The AES key lives in Android Keystore (secure
  * hardware, StrongBox when the phone has it), can be used only by this app and cannot be copied
- * off the phone. Only "iv:ciphertext" is stored, in its own preferences file, which is excluded
+ * off the phone. Each slot has its own AES key, stored entry and associated data. Only "iv:ciphertext" is stored, in its own preferences file, which is excluded
  * from backups and device transfer (res/xml/data_extraction_rules.xml, backup_rules.xml).
  *
  * No screen-unlock requirement: the twice-daily background check must read the key while the
  * phone is locked.
  */
-class ApiKeyStore(context: Context) {
+class ApiKeyStore(context: Context, private val slot: Slot = Slot.FRED) {
+    /** FRED keeps the names it has used since 0.11, so no migration is needed. */
+    enum class Slot(val alias: String, val pref: String, aad: String) {
+        FRED("marketwatcher_fred_key", "fred_api_key_enc", "fred_api_key"),
+        ALPHA_VANTAGE("marketwatcher_av_key", "av_api_key_enc", "av_api_key");
+
+        internal val aad: ByteArray = aad.toByteArray(Charsets.UTF_8)
+    }
+
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     sealed interface Loaded {
@@ -37,15 +45,15 @@ class ApiKeyStore(context: Context) {
         data object TryLater : Loaded
     }
 
-    fun has(): Boolean = prefs.contains(PREF)
+    fun has(): Boolean = prefs.contains(slot.pref)
 
     private fun keystore(): KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-    private fun existingKey(): SecretKey? = keystore().getKey(ALIAS, null) as SecretKey?
+    private fun existingKey(): SecretKey? = keystore().getKey(slot.alias, null) as SecretKey?
 
     private fun newKey(strongBox: Boolean): SecretKey = try {
         KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).apply {
-            init(KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            init(KeyGenParameterSpec.Builder(slot.alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256)
@@ -63,21 +71,21 @@ class ApiKeyStore(context: Context) {
     fun save(apiKey: String): Unit = synchronized(LOCK) {
         val key = existingKey() ?: newKey(strongBox = true)
         val c = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key) }
-        c.updateAAD(AAD)
+        c.updateAAD(slot.aad)
         val ct = c.doFinal(apiKey.trim().toByteArray(Charsets.UTF_8))
         val stored = b64(c.iv) + ":" + b64(ct)
-        check(prefs.edit().putString(PREF, stored).commit()) { "Could not write the encrypted key." }
+        check(prefs.edit().putString(slot.pref, stored).commit()) { "Could not write the encrypted key." }
     }
 
     fun load(): Loaded = synchronized(LOCK) {
-        val stored = prefs.getString(PREF, null) ?: return Loaded.None
+        val stored = prefs.getString(slot.pref, null) ?: return Loaded.None
         return try {
             val parts = stored.split(":")
             require(parts.size == 2) { "bad format" }
             val key = existingKey() ?: throw KeyGoneException()
             val c = Cipher.getInstance(TRANSFORMATION)
                 .apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, unb64(parts[0]))) }
-            c.updateAAD(AAD)
+            c.updateAAD(slot.aad)
             Loaded.Key(String(c.doFinal(unb64(parts[1])), Charsets.UTF_8))
         } catch (e: Exception) {
             val permanent = when (e) {
@@ -85,7 +93,7 @@ class ApiKeyStore(context: Context) {
                 is KeyGoneException, is AEADBadTagException, is KeyPermanentlyInvalidatedException,
                 is InvalidAlgorithmParameterException, is IllegalArgumentException -> true
                 // Android also wraps temporary keystore failures in this one: permanent only if the key is really gone.
-                is UnrecoverableKeyException -> runCatching { !keystore().containsAlias(ALIAS) }.getOrDefault(false)
+                is UnrecoverableKeyException -> runCatching { !keystore().containsAlias(slot.alias) }.getOrDefault(false)
                 else -> false
             }
             if (permanent) { clearLocked(); Loaded.Unreadable } else Loaded.TryLater
@@ -93,7 +101,7 @@ class ApiKeyStore(context: Context) {
     }
 
     fun clear(): Unit = synchronized(LOCK) { clearLocked() }
-    private fun clearLocked() { prefs.edit().remove(PREF).commit() }
+    private fun clearLocked() { prefs.edit().remove(slot.pref).commit() }
 
     private class KeyGoneException : Exception()
 
@@ -102,11 +110,8 @@ class ApiKeyStore(context: Context) {
 
     companion object {
         const val FILE = "marketwatcher_secrets"
-        private const val PREF = "fred_api_key_enc"
-        private const val ALIAS = "marketwatcher_fred_key"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
-        private val AAD = "fred_api_key".toByteArray(Charsets.UTF_8)
         /** One lock for every instance and for [Settings]: saves, loads, migration and key creation never interleave. */
         val LOCK = Any()
     }

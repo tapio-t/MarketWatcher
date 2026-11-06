@@ -74,7 +74,7 @@ internal fun TodayScreen(
                 val text = at.format(HM_DMY)
                 // The S&P 500 close comes ~13 hours before VIX: show how far each part reaches.
                 val days = if (t != null && price != null && price.date != t.date)
-                    " · S&P 500 to ${dmy(price.date)} · VIX to ${dmy(t.date)}" else ""
+                    " · S&P 500 to ${dmy(price.date)}${if (price.estimated) " (estimate)" else ""} · VIX to ${dmy(t.date)}" else ""
                 Text("Data checked $text$days · pull down to check now", fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 0.dp))
             }

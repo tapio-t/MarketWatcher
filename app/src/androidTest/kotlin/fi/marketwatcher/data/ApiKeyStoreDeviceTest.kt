@@ -18,10 +18,12 @@ import java.io.File
 class ApiKeyStoreDeviceTest {
     private val ctx: Context = ApplicationProvider.getApplicationContext()
     private val key = "4f8c2e91b7d34a06c5e1f92a7b3d1a2b"
+    private val avKey = "X7KQ2M9B4TZ1LW8P"
     private fun prefsFile(name: String) = File(ctx.applicationInfo.dataDir, "shared_prefs/$name.xml")
 
     @Before fun clean() {
         ApiKeyStore(ctx).clear()
+        ApiKeyStore(ctx, ApiKeyStore.Slot.ALPHA_VANTAGE).clear()
         ctx.getSharedPreferences(Settings.FILE, Context.MODE_PRIVATE).edit().clear().commit()
     }
 
@@ -52,6 +54,46 @@ class ApiKeyStoreDeviceTest {
         assertTrue(s.keyMigratedAt != null)
         s.migrateKey()   // running again changes nothing
         assertEquals(key, Settings(ctx).apiKey)
+    }
+
+    @Test fun alphaVantageKeyRoundTripAndSeparateFromFred() {
+        val av = ApiKeyStore(ctx, ApiKeyStore.Slot.ALPHA_VANTAGE)
+        val fred = ApiKeyStore(ctx)
+        av.save(avKey)
+        fred.save(key)
+        assertEquals(ApiKeyStore.Loaded.Key(avKey), av.load())
+        assertEquals(ApiKeyStore.Loaded.Key(key), fred.load())
+        val text = prefsFile(ApiKeyStore.FILE).readText()
+        assertFalse("ciphertext only", text.contains(avKey) || text.contains(key))
+        av.clear()
+        assertEquals(ApiKeyStore.Loaded.None, av.load())
+        assertEquals("removing one key leaves the other", ApiKeyStore.Loaded.Key(key), fred.load())
+        av.save(avKey)
+        fred.clear()
+        assertEquals(ApiKeyStore.Loaded.Key(avKey), av.load())
+    }
+
+    /** Each slot has its own AES key and associated data: one slot's ciphertext can't be read as the other. */
+    @Test fun ciphertextMovedToTheOtherSlotIsUnreadable() {
+        ApiKeyStore(ctx).save(key)
+        ApiKeyStore(ctx, ApiKeyStore.Slot.ALPHA_VANTAGE).save(avKey)
+        val p = ctx.getSharedPreferences(ApiKeyStore.FILE, Context.MODE_PRIVATE)
+        p.edit().putString(ApiKeyStore.Slot.ALPHA_VANTAGE.pref, p.getString(ApiKeyStore.Slot.FRED.pref, null)).commit()
+        assertEquals(ApiKeyStore.Loaded.Unreadable, ApiKeyStore(ctx, ApiKeyStore.Slot.ALPHA_VANTAGE).load())
+        assertEquals(ApiKeyStore.Loaded.Key(key), ApiKeyStore(ctx).load())
+    }
+
+    @Test fun settingsKeepsBothKeys() {
+        val s = Settings(ctx)
+        s.saveApiKey(key)
+        s.saveAvApiKey(avKey)
+        assertTrue(s.hasAvKey)
+        assertEquals(avKey, s.avApiKey)
+        assertEquals(avKey.takeLast(4), s.avApiKeyTail())
+        s.removeAvApiKey()
+        assertFalse(s.hasAvKey)
+        assertEquals("", s.avApiKey)
+        assertEquals(key, s.apiKey)
     }
 
     @Test fun backupsExcludeBothKeyFiles() {

@@ -19,6 +19,10 @@ data class PriceView(
     val sma200Rising: Boolean?,
     /** true: the day has a full engine reading; false: price only (VIX/VIX3M not published yet). */
     val complete: Boolean,
+    /** The close is estimated from VOO because FRED has not published it yet (see [VooEstimate]). */
+    val estimated: Boolean = false,
+    /** An estimated day that is a VOO ex-dividend day (the dividend is added back when its amount is known). */
+    val exDividend: Boolean = false,
 ) {
     val drawdown: Double get() = close / ath - 1
     val distSma200: Double? get() = sma200?.let { close / it - 1 }
@@ -55,10 +59,14 @@ object PriceDays {
      * VIX3M), [closes] the FRED S&P 500 closes by date. The closes after the last engine day continue
      * the same sequence with the engine's own rules: a new high only when strictly above, the 200-day
      * average of the last 200 closes, "rising" against its value 20 trading days earlier.
+     * [estimates] (from VOO) continue after the last FRED close; FRED's close wins on any day it has.
      */
-    fun after(days: List<Day>, closes: Map<String, Double>): List<PriceView> {
+    fun after(days: List<Day>, closes: Map<String, Double>, estimates: Map<String, Estimate> = emptyMap()): List<PriceView> {
         val lastFull = days.lastOrNull()?.date ?: return emptyList()
         val extra = closes.filterKeys { it > lastFull }.toSortedMap()
+        val lastFred = maxOf(lastFull, closes.keys.maxOrNull() ?: lastFull)
+        val est = estimates.filterKeys { it > lastFred }
+        for ((d, e) in est) extra[d] = e.close
         if (extra.isEmpty()) return emptyList()
         val dates = days.map { it.date } + extra.keys
         val px = days.map { it.spx } + extra.values
@@ -74,8 +82,10 @@ object PriceDays {
             if (i < days.size) continue
             val s = sma(i)
             val sPrev = if (i >= t.SMA_SLOPE_DAYS) sma(i - t.SMA_SLOPE_DAYS) else null
+            val e = est[dates[i]]
             out += PriceView(dates[i], px[i], px[i - 1], dates[i - 1], ath, athDate, s, sPrev,
-                if (s != null && sPrev != null) s > sPrev else null, complete = false)
+                if (s != null && sPrev != null) s > sPrev else null, complete = false,
+                estimated = e != null, exDividend = e?.exDividend ?: false)
         }
         return out
     }

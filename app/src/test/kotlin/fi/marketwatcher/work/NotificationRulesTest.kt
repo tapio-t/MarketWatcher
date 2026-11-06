@@ -119,4 +119,23 @@ class NotificationRulesTest {
         assertTrue(t.text, t.text.startsWith("Simulated previous close"))
         assertTrue(t.title, t.title.startsWith("Test: Sharp fall: S&P 500 −2.50%"))
     }
+
+    @Test fun estimatedCloseIsMarkedInTheTitles() {
+        val p = Previous(State.CALM, emptySet(), false)
+        val est = day(97.0, 100.0).copy(estimated = true, exDividend = true)
+        val fall = sharp(p, est).single()
+        assertEquals("Very sharp fall (estimate): S&P 500 −3.00% on 14.10.2026", fall.title)
+        assertTrue(fall.text, fall.text.startsWith("Estimated from VOO; FRED has not published the close yet. Ex-dividend day. "))
+        val below = NotificationRules.evaluate(p, est.copy(spx = 90.0), notifyState = false, notifyBelowSma = true).single()
+        assertEquals("S&P 500 is below its 200-day average (estimate)", below.title)
+        assertEquals("FRED's close", "S&P 500 is below its 200-day average",
+            NotificationRules.evaluate(p, day(90.0, 100.0), notifyState = false, notifyBelowSma = true).single().title)
+    }
+
+    /** An estimate notified the fall; FRED's close for the same day later is not notified again. */
+    @Test fun fredCloseAfterAnEstimateIsNotNotifiedAgain() {
+        val afterEstimate = Previous(State.CALM, emptySet(), true, sharpFallDate = "2026-10-14")
+        assertTrue(sharp(afterEstimate, day(97.9, 100.0)).isEmpty())
+        assertTrue(NotificationRules.evaluate(afterEstimate, day(90.0, 100.0), notifyState = false, notifyBelowSma = true).isEmpty())
+    }
 }

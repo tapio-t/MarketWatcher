@@ -149,14 +149,19 @@ internal data class TileGroup(val title: String, val tiles: List<Tile>)
 internal fun signedPct2(x: Double): String =
     if (Math.round(x * 10_000) == 0L) "0.00%" else (if (x < 0) "−" else "+") + fmt("%.2f%%", abs(x) * 100)
 
-/** The Day change tile: amber at −2.00% or worse, with the fall tier under the value. */
+/** The Day change tile: amber at −2.00% or worse, with the fall tier (and "Ex-dividend day") under the value. */
 internal fun dayChangeTile(p: PriceView): Tile =
     Tile("Day change", p.change?.let { signedPct2(it) } ?: "—", dmy(p.date), flagged = p.fall != null,
-        info = InfoKind.DAY_CHANGE, sub = p.fall?.title)
+        info = InfoKind.DAY_CHANGE,
+        sub = listOfNotNull(p.fall?.title, if (p.exDividend) "Ex-dividend day" else null).joinToString(" · ").ifEmpty { null })
+
+/** The Close tile; an estimated close says so under the value. */
+internal fun closeTile(p: PriceView): Tile =
+    Tile("Close", fmt("%,.0f", p.close), dmy(p.date), sub = if (p.estimated) "estimate from VOO" else null)
 
 /** Today, right below the Suggested box: the newest close against the previous one. */
 internal fun dayChangeGroup(p: PriceView): TileGroup = TileGroup("S&P 500 day change", listOf(
-    Tile("Close", fmt("%,.0f", p.close), dmy(p.date)),
+    closeTile(p),
     Tile("Prev. close", p.prevClose?.let { fmt("%,.0f", it) } ?: "—", dmy(p.prevDate)),
     dayChangeTile(p),
 ))
@@ -172,7 +177,7 @@ internal fun priceGroups(p: PriceView, withDayChange: Boolean = false): List<Til
     val day = dmy(p.date)
     return listOf(
         TileGroup("S&P 500", listOfNotNull(
-            Tile("Close", fmt("%,.0f", p.close), day),
+            closeTile(p),
             Tile("All-time high", fmt("%,.0f", p.ath), dmy(p.athDate)),
             Tile("From high", signedPct(p.drawdown), day),
             if (withDayChange) dayChangeTile(p) else null,
