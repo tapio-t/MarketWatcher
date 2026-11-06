@@ -294,17 +294,13 @@ private fun DataSources() {
         Sub("S&P 500 estimate from VOO (optional, Alpha Vantage)")
         Body("With an Alpha Vantage key, the app downloads the daily closes of VOO (Vanguard S&P 500 ETF) when FRED " +
             "has not published the latest S&P 500 close yet: at most once an hour and 12 times a day, plus the VOO " +
-            "dividends once a week (the free key allows 25 requests a day). The closes are kept on the phone.
-" +
-            "• Estimate: FRED's last close scaled by VOO's change since that day, one trading day at a time.
-" +
+            "dividends once a week (the free key allows 25 requests a day). The closes are kept on the phone.\n" +
+            "• Estimate: FRED's last close scaled by VOO's change since that day, one trading day at a time.\n" +
             "• Ex-dividend day: VOO's price drops by the dividend and the index does not, so the dividend is added " +
-            "back (when Alpha Vantage gives the amount) and the Day change tile says \"Ex-dividend day\".
-" +
+            "back (when Alpha Vantage gives the amount) and the Day change tile says \"Ex-dividend day\".\n" +
             "• Estimates are used for the S&P 500, Trend and Day change tiles and the price notifications, marked " +
             "\"estimate\". FRED's close replaces each one when it is published. The suggested state and History use " +
-            "FRED only.
-" +
+            "FRED only.\n" +
             "Alpha Vantage's free key is for personal, non-commercial use.")
         Sub("Shiller CAPE updates")
         Body("Weekly, the background check looks for a new ie_data.xls on shillerdata.com and keeps it only if it " +
