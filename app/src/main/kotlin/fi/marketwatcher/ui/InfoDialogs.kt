@@ -143,12 +143,12 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
                 "the S&P 500 price by the average of ten years of inflation-adjusted earnings. The total return " +
                 "version reinvests dividends, so changes in how much companies pay out don't distort it. High values " +
                 "have historically been followed by lower long-term returns; it is not a timing signal."))
-            val how = if (d.capeEstimated) "Estimate: Robert Shiller's latest official value (${monthName(d.capeDate)}) " +
-                "scaled by the S&P 500 change since then." else "Official monthly value from Robert Shiller's data (${monthName(d.capeDate)})."
+            val how = "Robert Shiller's monthly value for ${monthName(d.capeDate)} from ie_data.xls. It changes when " +
+                "Shiller publishes a new file (about monthly)."
             val rank = d.capePct?.let { " Higher than ${fmt("%.0f", it * 100)}% of all months since 1881." } ?: ""
             val inApp = "In MarketWatcher: $how$rank The tile turns amber in the top " +
                 "${fmt("%.0f", (1 - Thresholds.CAPE_PCT) * 100)}% of its history since 1881. Context only."
-            Info("CAPE (total return)", d.cape?.let { (if (d.capeEstimated) "≈" else "") + fmt("%.1f", it) } ?: "—",
+            Info("CAPE (total return)", d.cape?.let { fmt("%.1f", it) } ?: "—",
                 d.capeDate, explanation, inApp, r.context.capeHigh, URL_SHILLER, flagName = "Top 10%")
         }
         InfoKind.SAHM -> {

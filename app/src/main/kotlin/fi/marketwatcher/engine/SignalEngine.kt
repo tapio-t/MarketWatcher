@@ -38,9 +38,8 @@ data class Day(
     val t10y2yDate: String? = null,
     val t10y2yInvertedSince: String? = null,   // first day of the current inversion (when inverted)
     val t10y2yLastInverted: String? = null,    // last inverted day before (when not inverted)
-    val cape: Double? = null,       // Shiller total return CAPE (official monthly value or daily estimate)
-    val capeDate: String? = null,   // month of the official value used, dated its first day
-    val capeEstimated: Boolean = false, // true: official value scaled by the S&P 500 change since that month
+    val cape: Double? = null,       // Shiller total return CAPE: the monthly value from ie_data.xls (app only, not in engine_v4.py)
+    val capeDate: String? = null,   // month of that value, dated its first day
     val capePct: Double? = null,    // percentile within Shiller's history since 1881
 )
 

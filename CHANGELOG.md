@@ -2,6 +2,16 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.22 (06.11.2026)
+- The CAPE check finds ie_data.xls on shillerdata.com again. The site now links it without
+  "https:" (`//img1.wsimg.com/…`), which the app didn't recognise ("Couldn't find ie_data.xls").
+  Absolute, protocol-relative, relative and script-escaped links are all found; only HTTPS and
+  only the file named exactly ie_data.xls. The download must be an Excel file before it is read.
+- Clearer CAPE check messages: the page couldn't be loaded / loaded but no link / the file isn't
+  Shiller's ie_data.xls.
+- The CAPE tile shows only values from ie_data.xls: no estimate (≈) between Shiller's updates.
+  After the file's newest month, Today and History show that month's value until a new file.
+
 ## 0.21 (06.11.2026)
 - S&P 500 estimate from VOO while FRED's close is missing (optional Alpha Vantage key in Settings):
   FRED's last close scaled by VOO's change since that day. The Close tile says "estimate from VOO",

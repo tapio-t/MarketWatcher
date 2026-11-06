@@ -20,13 +20,22 @@ class CapeHistoryTest {
         assertEquals(43.2066, h.lastOfficial!!.value, 1e-4)
     }
 
-    @Test fun officialBeforeTheLatestMonthEstimateAfter() {
-        val march2009 = h.valueOn(LocalDate.of(2009, 3, 9), 676.53)!!
-        assertFalse(march2009.estimated)
+    @Test fun eachMonthItsOwnValue() {
+        val march2009 = h.valueOn(LocalDate.of(2009, 3, 9))!!
+        assertEquals(YearMonth.of(2009, 3), march2009.month)
         assertEquals(14.5927, march2009.value, 1e-4)
-        val oct = h.valueOn(LocalDate.of(2026, 10, 1), 7651.54)!!
-        assertTrue(oct.estimated)
-        assertEquals(43.2066 * 7651.54 / 7631.47, oct.value, 1e-3)
-        assertTrue("top 10% since 1881", oct.percentile >= 0.90)
+        assertFalse("low in March 2009", march2009.percentile >= 0.90)
+        val sep = h.valueOn(LocalDate.of(2026, 9, 22))!!
+        assertEquals(YearMonth.of(2026, 9), sep.month)
+        assertEquals(43.2066, sep.value, 1e-4)
+    }
+
+    /** After the file's newest month the newest value stays, never scaled by the S&P 500 (0.22). */
+    @Test fun afterTheNewestMonthTheNewestValue() {
+        val sep = h.valueOn(LocalDate.of(2026, 9, 1))!!
+        for (d in listOf(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 6), LocalDate.of(2027, 2, 15))) {
+            assertEquals(d.toString(), sep, h.valueOn(d))
+        }
+        assertTrue("top 10% since 1881", sep.percentile >= 0.90)
     }
 }

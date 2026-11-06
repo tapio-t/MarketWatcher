@@ -11,14 +11,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Keeps the Shiller total return CAPE current. Shiller updates ie_data.xls about monthly and the
  * site changes the file's link with each update, so the app finds the link on shillerdata.com
- * (weekly, from the background check), downloads the file only when the link changed, reads it with
+ * ([CapeLinks]; weekly, from the background check), downloads the file only when the link changed, reads it with
  * [ShillerXls] and keeps it only if it is complete and not older than what the app has.
  * Fallback: import a downloaded ie_data.xls from the phone (Settings).
  */
 object CapeUpdater {
     private const val PAGE = "https://shillerdata.com/"
     private const val MAX_BYTES = 12 * 1024 * 1024
-    private val LINK = Regex("""https://[^"'\s<>]+?ie_data\.xls(?:\?[^"'\s<>]*)?""", RegexOption.IGNORE_CASE)
     val CHECK_EVERY_MS = TimeUnit.DAYS.toMillis(7)
 
     /** Runs the check if a week has passed (or [force]). Blocking: call off the main thread. Returns the result text. */
@@ -27,13 +26,24 @@ object CapeUpdater {
         val s = Settings(ctx)
         if (!force && System.currentTimeMillis() - s.capeCheckedAt < CHECK_EVERY_MS) return s.capeCheckResult.orEmpty()
         val result = try {
-            val html = String(get(PAGE, 2 * 1024 * 1024), Charsets.UTF_8)
-            val link = LINK.find(html.replace("&amp;", "&"))?.value
-                ?: throw IllegalStateException("Couldn't find ie_data.xls on shillerdata.com. Use Import file instead.")
+            val html = try {
+                String(get(PAGE, 2 * 1024 * 1024), Charsets.UTF_8)
+            } catch (e: Exception) {
+                throw IllegalStateException("Couldn't load shillerdata.com (${e.message ?: e.javaClass.simpleName})")
+            }
+            val link = CapeLinks.find(html, URL(PAGE))?.toString()
+                ?: throw IllegalStateException("shillerdata.com loaded, but no ie_data.xls link was found. Use Import file instead.")
             if (link == s.capeLastLink && !force) {
                 "No new file."
             } else {
-                val h = CapeHistory.fromShiller(ShillerXls.parse(get(link, MAX_BYTES)), "shillerdata.com ie_data.xls")
+                val bytes = get(link, MAX_BYTES)
+                if (!CapeLinks.isXls(bytes)) throw IllegalStateException("The link on shillerdata.com didn't give an Excel file.")
+                val rows = try {
+                    ShillerXls.parse(bytes)
+                } catch (e: ShillerXls.FormatException) {
+                    throw IllegalStateException("Downloaded, but the file isn't Shiller's ie_data.xls: ${e.message}")
+                }
+                val h = CapeHistory.fromShiller(rows, "shillerdata.com ie_data.xls")
                 if (CapeHistory.saveIfNewer(ctx, h)) {
                     s.capeLastLink = link
                     "Updated: official values to ${h.lastOfficial?.month}."

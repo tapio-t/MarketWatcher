@@ -47,8 +47,8 @@ Not investment advice.
     about 6 months (Rate shock); CAPE in the top 10% of its history since 1881.
     Every amber-capable tile shows ⓘ: tap for a pop-up with the value and date, what it means,
     how MarketWatcher uses it, whether its condition is on, and a source link.
-    CAPE: Robert Shiller's official monthly value; from his latest month on, an estimate (≈) =
-    latest official value × S&P 500 change since that month.
+    CAPE: Robert Shiller's monthly value from `ie_data.xls`; after the file's newest month, that
+    month's value until a new file (no estimate since 0.22).
   - Past-year S&P 500 chart coloured by state, with the dashed 200-day average and a line key.
     Under it a day scroller like History's (‹ › step one day, hold to repeat; drag the bar, or tap
     or drag on the chart), the selected date and state, and the selected day's six tiles: Close,
@@ -259,7 +259,9 @@ from `ie_data.xls` (shillerdata.com; Data sheet columns A, B and O), 1881-01 to 
 shows it from 2008; earlier months only rank values for the top-10% rule. The newest months are
 provisional (September 2026 uses the 1 September close; recent CPI is estimated). Updates: the
 background check looks weekly for a new file on shillerdata.com (the link changes with each
-update, so the app finds it on the page) and keeps it only if complete and not older; or import
+update, so the app finds it on the page with `CapeLinks`: absolute, protocol-relative or relative
+links, HTTPS only, the file named exactly `ie_data.xls`, checked to be an Excel file before it is
+read) and keeps it only if complete and not older; or import
 the file in Settings. The `.xls` is read by `ShillerXls.kt` (no library), which reads only the
 Data sheet's numbers.
 

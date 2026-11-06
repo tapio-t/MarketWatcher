@@ -304,8 +304,8 @@ private fun DataSources() {
             "Alpha Vantage's free key is for personal, non-commercial use.")
         Sub("Shiller CAPE updates")
         Body("Weekly, the background check looks for a new ie_data.xls on shillerdata.com and keeps it only if it " +
-            "is complete and not older than the data in the app. Between Shiller's monthly updates, the tile shows an " +
-            "estimate: the latest official value scaled by the S&P 500 change since that month.")
+            "is complete and not older than the data in the app. The tile shows the file's value for each month; after " +
+            "the file's newest month it keeps showing that month's value until Shiller publishes a new file.")
         Sub("How they are combined")
         Body("Downloaded days are added after 22.09.2026. Sahm rule, 2-year yield, yield curve, Buffett ratio " +
             "(NCBEILQ027S ÷ GDP) and CAPE are added to every day, each value only from the date it was published: " +
