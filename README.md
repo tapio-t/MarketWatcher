@@ -23,6 +23,12 @@ Not investment advice.
     tiles at once; the Suggested state and the other tiles stay on the last day with VIX. Then the
     Suggested box says "for DD.MM.YYYY · waiting for VIX of newer days" and the data line shows
     "S&P 500 to … · VIX to …".
+  - **S&P 500 estimate from VOO** (since 0.21, optional Alpha Vantage key). When FRED has not
+    published the latest close, FRED's last close is scaled by VOO's change since that day
+    (`engine/VooEstimate.kt`). On VOO ex-dividend days the dividend is added back and the Day change
+    tile says "Ex-dividend day". Estimated closes say "estimate from VOO" under the Close tile, and
+    notifications from them end the title with "(estimate)". FRED's close replaces each one;
+    the Suggested state and History use FRED only.
   - Values, each with the date of its observation under it:
     S&P 500 (close, all-time high, from high), Trend (200-day average, distance, direction),
     Volatility (VIX, VIX3M, VIX/VIX3M), and Economy in two rows:
@@ -78,6 +84,8 @@ Not investment advice.
   - FRED API key (see Security): password field with Show/Hide, 32-character format check, and a
     check with FRED before saving. After saving only "•••• •••• 1a2b" is shown, with
     **Replace key** and **Remove key**.
+  - Alpha Vantage API key (optional, since 0.21): the same card and protections, a check with
+    Alpha Vantage before saving (it downloads VOO's closes), and the last VOO download.
   - Notifications for state changes and economy flags, and for the S&P 500 closing below its
     200-day average (once per crossing). Each has a **Test** button (see below), and the last
     background check is shown.
@@ -86,14 +94,16 @@ Not investment advice.
 
 ## Security
 
-- **API key encrypted.**
+- **API keys encrypted.** The FRED key and the optional Alpha Vantage key each have their own
+  Android Keystore AES key, stored entry and associated data (`ApiKeyStore.Slot`).
 - **Automatic migration from plain text** (versions up to 0.10). At the start of the first data
   load (app or background check, whichever comes first), off the main thread: encrypt, read
   back, and only then delete the plain-text entry (`commit()`). If anything fails, the plain-text
   key keeps working and the move is retried next time. Nothing to do by hand.
 - **Backups.**
 - **Error texts** shown on screen or saved as the last background check pass through `Redact`,
-  which replaces any `api_key=…` or key-shaped value with `***`. Requests never follow redirects.
+  which replaces any `api_key=…` / `apikey=…` or key-shaped value with `***`. Requests never follow
+  redirects. Alpha Vantage accepts the key only in the request address (HTTPS).
 - **Network:** HTTPS only to `api.stlouisfed.org`; cleartext traffic disabled in the manifest.
 - **Robust parsing:** an unparseable FRED value is skipped instead of failing the refresh.
 - **Lock screen:** notifications show only "MarketWatcher · Market update" until unlocked.
@@ -255,6 +265,11 @@ Data sheet's numbers.
 
 DGS2 and T10Y2Y are fetched from January 2007 so History shows them from 2008; a cache that
 doesn't reach back far enough is backfilled once. Each refresh is 9 FRED requests.
+
+VOO (Alpha Vantage, free key: 25 requests a day, personal non-commercial use): the latest 100
+daily closes, downloaded only when FRED and the saved VOO closes both lack the expected trading
+day, at most once an hour and 12 times a day; VOO dividends once a week. Kept in the app's
+private storage (`files/alphavantage/`), also after the key is removed.
 
 MarketWatcher-data `assets/replay_2007_2026.json` holds S&P 500, VIX, VIX3M and NFCI (with the NFCI
 week date and the values 1, 4 and 8 weeks earlier; the 8-week column was added in 0.15) from 2007-01-03 to 2026-09-22 (FRED keeps only ~10 years of S&P 500 data). Live FRED

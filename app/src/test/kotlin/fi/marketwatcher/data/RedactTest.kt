@@ -20,5 +20,15 @@ class RedactTest {
     @Test fun leavesNormalMessagesAlone() {
         val m = "FRED SP500 returned HTTP 500."
         assertEquals(m, Redact.text(m))
+        val av = "Alpha Vantage: VOO closes to 05.11.2026. TIME_SERIES_DAILY ABCDEFGHIJKLMNOP 1234567890123456"
+        assertEquals("16 letters only or 16 digits only are not keys", av, Redact.text(av))
+    }
+
+    @Test fun removesAlphaVantageKeys() {
+        val avKey = "X7KQ2M9B4TZ1LW8P"
+        val url = Redact.text("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=VOO&apikey=demo123&outputsize=compact")
+        assertEquals(true, url.contains("apikey=***&outputsize=compact"))
+        assertFalse(url.contains("demo123"))
+        assertEquals("Your API key *** is over the limit", Redact.text("Your API key $avKey is over the limit"))
     }
 }

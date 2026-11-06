@@ -7,10 +7,13 @@ import fi.marketwatcher.engine.PriceView
 import fi.marketwatcher.engine.Reading
 import fi.marketwatcher.engine.SignalEngine
 import fi.marketwatcher.engine.State
+import fi.marketwatcher.engine.VooEstimate
 import fi.marketwatcher.engine.price
 import org.json.JSONArray
 import java.time.Instant
+import java.time.Duration
 import java.time.LocalDate
+import java.time.ZonedDateTime
 
 /**
  * Personal settings. The FRED API key is kept encrypted by [ApiKeyStore]; everything else here is
@@ -24,6 +27,7 @@ class Settings(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences(FILE, Context.MODE_PRIVATE)
     private val store = ApiKeyStore(app)
+    private val avStore = ApiKeyStore(app, ApiKeyStore.Slot.ALPHA_VANTAGE)
 
     /** Safe to call any number of times; blocking (Keystore), so call off the main thread. */
     fun migrateKey(): Unit = synchronized(LOCK) {
@@ -69,6 +73,47 @@ class Settings(context: Context) {
         store.clear()
         prefs.edit().remove(LEGACY_KEY).commit()
     }
+
+    /** True when an Alpha Vantage key is saved (optional: VOO estimates while FRED's close is missing). */
+    val hasAvKey: Boolean get() = avStore.has()
+
+    /** The Alpha Vantage key, decrypted on demand. "" when none. */
+    val avApiKey: String
+        get() = when (val k = avStore.load()) {
+            is ApiKeyStore.Loaded.Key -> k.value
+            ApiKeyStore.Loaded.Unreadable -> { prefs.edit().putBoolean(AV_UNREADABLE, true).apply(); "" }
+            ApiKeyStore.Loaded.TryLater -> throw AlphaVantageException("Couldn't read the saved Alpha Vantage key right now. Try again.")
+            ApiKeyStore.Loaded.None -> ""
+        }
+
+    fun avApiKeyTail(): String? = runCatching { avApiKey }.getOrNull()?.takeIf { it.length >= 4 }?.takeLast(4)
+
+    fun saveAvApiKey(key: String): Unit = synchronized(LOCK) {
+        avStore.save(key)
+        prefs.edit().remove(AV_UNREADABLE).commit()
+    }
+
+    /** Removes only the key: saved VOO prices stay and still give estimates. */
+    fun removeAvApiKey(): Unit = synchronized(LOCK) { avStore.clear() }
+
+    var avKeyWasUnreadable: Boolean
+        get() = prefs.getBoolean(AV_UNREADABLE, false)
+        set(v) { prefs.edit().putBoolean(AV_UNREADABLE, v).apply() }
+
+    /** VOO downloads for [AvBudget]: the last one (epoch ms), its New York day and how many that day. */
+    val avLastRequestAt: Long get() = prefs.getLong("av_last_request_at", 0L)
+    val avDay: String? get() = prefs.getString("av_day", null)
+    val avDayCount: Int get() = prefs.getInt("av_day_count", 0)
+    fun recordAvRequest(nowMs: Long, day: String) {
+        val count = if (avDay == day) avDayCount + 1 else 1
+        prefs.edit().putLong("av_last_request_at", nowMs).putString("av_day", day).putInt("av_day_count", count).commit()
+    }
+
+    /** The last VOO download (epoch ms) and what it got, for the Alpha Vantage card in Settings. */
+    val avLastResultAt: Long get() = prefs.getLong("av_last_result_at", 0L)
+    val avLastResult: String? get() = prefs.getString("av_last_result", null)
+    fun recordAvResult(text: String) = prefs.edit()
+        .putLong("av_last_result_at", System.currentTimeMillis()).putString("av_last_result", Redact.text(text)).apply()
 
     /** Set when a saved key could not be decrypted and was removed (shown once in Settings). */
     var keyWasUnreadable: Boolean
@@ -124,6 +169,7 @@ class Settings(context: Context) {
         const val LEGACY_KEY = "fred_api_key"          // plain text, versions up to 0.10
         private const val MIGRATED_AT = "key_migrated_at"
         private const val KEY_UNREADABLE = "key_unreadable"
+        private const val AV_UNREADABLE = "av_key_unreadable"
         private val LOCK = ApiKeyStore.LOCK   // shared with the store: migration can't overwrite a newly saved key
     }
 }
@@ -176,6 +222,7 @@ object BundledHistory {
 /** Fetches (or reads cached) FRED data, runs the engine, and remembers what was shown last. */
 class SignalRepository(private val context: Context) {
     private val cache = SeriesCache(context)
+    private val voo = VooCache(context)
     private val settings = Settings(context)
     private val memory = context.getSharedPreferences("marketwatcher_state", Context.MODE_PRIVATE)
 
@@ -198,6 +245,8 @@ class SignalRepository(private val context: Context) {
         val prices: List<PriceView> = emptyList(),
         /** The last trading day for which a sharp fall was seen (so it is notified only once). */
         val previousSharpFallDate: String? = null,
+        /** The newest S&P 500 close from FRED (not an estimate). */
+        val fredPriceDate: String? = null,
     ) {
         val flags: Set<String> get() = today?.let { flagsOf(it) } ?: emptySet()
         /** The newest S&P 500 close: a price-only day if there is one, else today's reading. */
@@ -218,7 +267,13 @@ class SignalRepository(private val context: Context) {
         settings.migrateKey()
         val fred = FredClient(settings.apiKey)
         val dailyStart = LocalDate.now().minusYears(11)   // FRED keeps ~10 years of SP500
-        val data = Series.entries.associateWith { cache.update(it, fred, dailyStart) }
+        val data = try {
+            Series.entries.associateWith { cache.update(it, fred, dailyStart) }
+        } catch (e: Exception) {
+            updateVoo(cache.read(Series.SP500).lastDate)   // FRED failed: VOO can still fill the gap
+            throw e
+        }
+        updateVoo(data.getValue(Series.SP500).lastDate)
         settings.lastDownloadAt = System.currentTimeMillis()
         return compute(data).also { if (save) remember(it) }
     }
@@ -234,7 +289,40 @@ class SignalRepository(private val context: Context) {
         val data = Series.entries.associateWith {
             if (it == Series.SP500) cache.update(it, fred, dailyStart) else cache.read(it)
         }
+        updateVoo(data.getValue(Series.SP500).lastDate)
         return compute(data).also { remember(it) }
+    }
+
+    /**
+     * Downloads VOO from Alpha Vantage only when FRED and the saved VOO closes both lack the expected
+     * trading day, within [AvBudget]; dividends weekly. Never fails the refresh: the outcome is shown
+     * on the Alpha Vantage card in Settings.
+     */
+    private fun updateVoo(fredLast: String?) {
+        if (!settings.hasAvKey) return
+        val now = ZonedDateTime.now()
+        val expected = AvBudget.expectedDate(now)
+        val nowMs = System.currentTimeMillis()
+        val nyDay = now.withZoneSameInstant(AvBudget.NEW_YORK).toLocalDate().toString()
+        val haveVoo = voo.closes().keys.maxOrNull()
+        val needCloses = (fredLast == null || fredLast < expected) && (haveVoo == null || haveVoo < expected) &&
+            AvBudget.allowed(settings.avLastRequestAt, settings.avDay, settings.avDayCount, nowMs, nyDay)
+        val divAt = voo.dividendsFetchedAt()
+        val needDividends = divAt == null || Duration.between(divAt, Instant.now()).toDays() >= AvBudget.DIVIDENDS_DAYS
+        if (!needCloses && !needDividends) return
+        try {
+            val av = AlphaVantageClient(settings.avApiKey)
+            if (needCloses) {
+                settings.recordAvRequest(nowMs, nyDay)
+                val c = av.dailyCloses()
+                voo.addCloses(c)
+                settings.recordAvResult("VOO closes to ${c.keys.maxOrNull()?.let { fi.marketwatcher.engine.Explain.dmy(it) } ?: "—"}.")
+            }
+            // On failure the saved dividends stay and the next try is a week later (the request limit is small).
+            if (needDividends) voo.setDividends(runCatching { av.dividends() }.getOrElse { voo.dividends() })
+        } catch (e: Exception) {
+            settings.recordAvResult(e.message ?: e.javaClass.simpleName)
+        }
     }
 
     private fun compute(data: Map<Series, CachedSeries>): Result {
@@ -249,6 +337,8 @@ class SignalRepository(private val context: Context) {
         val days = BundledHistory.merge(bundled, live)
         val readings = SignalEngine.run(days)
         val liveLast = live.lastOrNull()?.date
+        // Saved VOO closes estimate the S&P 500 after FRED's last close (also after the key is removed).
+        val estimates = VooEstimate.after(v(Series.SP500), voo.closes(), voo.dividends())
         return Result(
             today = if (liveLast != null) readings.lastOrNull() else null,
             history = readings,
@@ -256,8 +346,9 @@ class SignalRepository(private val context: Context) {
             previousState = memory.getString("state", null)?.let { runCatching { State.valueOf(it) }.getOrNull() },
             previousFlags = memory.getStringSet("flags", emptySet()).orEmpty(),
             previousBelowSma = if (memory.contains("below_sma")) memory.getBoolean("below_sma", false) else null,
-            prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500)) else emptyList(),
+            prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList(),
             previousSharpFallDate = memory.getString("sharp_fall_date", null),
+            fredPriceDate = data.getValue(Series.SP500).lastDate,
         )
     }
 

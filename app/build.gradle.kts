@@ -119,8 +119,8 @@ android {
         applicationId = "fi.marketwatcher"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.20-personal"
+        versionCode = 21
+        versionName = "0.21-personal"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

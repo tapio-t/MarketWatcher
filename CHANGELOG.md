@@ -2,6 +2,21 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.21 (06.11.2026)
+- S&P 500 estimate from VOO while FRED's close is missing (optional Alpha Vantage key in Settings):
+  FRED's last close scaled by VOO's change since that day. The Close tile says "estimate from VOO",
+  the data line "(estimate)". On VOO ex-dividend days the dividend is added back and the Day change
+  tile says "Ex-dividend day"; the sharp-fall rating still applies.
+- Sharp-fall and 200-day average notifications also come from an estimate, with "(estimate)" in the
+  title. FRED's close for the same day replaces the estimate without a second notification.
+- The Suggested state, History and the engine use FRED only (no backtest change). The early check
+  keeps retrying until FRED has the close.
+- VOO is downloaded only when FRED and the saved VOO closes lack the expected day: at most once an
+  hour and 12 times a day, plus dividends weekly (the free key allows 25 requests a day). VOO prices
+  stay on the phone after the key is removed and still give estimates.
+- The Alpha Vantage key is encrypted like the FRED key, in its own Keystore slot, and excluded from
+  backups. Error texts hide `apikey=` and Alpha Vantage key-shaped values.
+
 ## 0.20 (20.10.2026)
 - No visible changes. The History device tests pass on the phone again:
   - Chip taps ("Today", years) first scroll the page to the chip row. The test tool's scroll only
