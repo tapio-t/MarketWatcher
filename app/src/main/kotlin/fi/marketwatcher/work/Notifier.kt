@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import fi.marketwatcher.work.NotificationRules.CHANNEL_BELOW_SMA
+import fi.marketwatcher.work.NotificationRules.CHANNEL_CURVE
 import fi.marketwatcher.work.NotificationRules.CHANNEL_SHARP_FALL
 import fi.marketwatcher.work.NotificationRules.CHANNEL_STATE
 import fi.marketwatcher.work.NotificationRules.LEGACY_CHANNEL
@@ -46,6 +47,10 @@ object Notifier {
         nm.createNotificationChannel(NotificationChannel(CHANNEL_SHARP_FALL, "Sharp falls",
             NotificationManager.IMPORTANCE_HIGH).apply {
             description = "When the S&P 500 falls 2% or more in a day"
+        })
+        nm.createNotificationChannel(NotificationChannel(CHANNEL_CURVE, "Volatility curve inverted",
+            NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "When VIX/VIX3M reaches 1.00 (again after falling to 0.90 or below)"
         })
         if (nm.getNotificationChannel(LEGACY_CHANNEL) != null) nm.deleteNotificationChannel(LEGACY_CHANNEL)
     }

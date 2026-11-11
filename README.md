@@ -86,9 +86,9 @@ Not investment advice.
     **Replace key** and **Remove key**.
   - Alpha Vantage API key (optional, since 0.21): the same card and protections, a check with
     Alpha Vantage before saving (it downloads VOO's closes), and the last VOO download.
-  - Notifications for state changes and economy flags, and for the S&P 500 closing below its
-    200-day average (once per crossing). Each has a **Test** button (see below), and the last
-    background check is shown.
+  - Notifications for state changes and economy flags, the S&P 500 closing below its 200-day
+    average (once per crossing), sharp falls and an inverted volatility curve. Each has a **Test**
+    button (see below); the last background check and a log of the last 30 are shown.
   - Data sources: the bundled history file, the FRED files kept on the phone, and how they are
     combined.
 
@@ -126,8 +126,9 @@ Not investment advice.
   notification found outside these hours, Test ones included, is held (newest per kind, with
   "Found HH:MM DD.MM.YYYY" added) and shown at the next 08:00, or when the app is opened inside the
   window. Settings lists what is held.
-- Three notification types (Android channels), all **high importance** so they pop up as banners:
-  "State and economy", "Below 200-day average" and "Sharp falls" (since 0.16). The old "Market state" type (default
+- Four notification types (Android channels), all **high importance** so they pop up as banners:
+  "State and economy", "Below 200-day average", "Sharp falls" (since 0.16) and "Volatility curve
+  inverted" (since 0.23). The old "Market state" type (default
   importance, no banners) is removed on start; an app cannot raise a type's importance itself.
 - Notification permission (Android 13+) is asked for only when a notification switch is turned
   on or **Test** is tapped. If Android no longer shows the request, the app opens its
@@ -137,13 +138,21 @@ Not investment advice.
 - **Sharp falls:** the S&P 500 close 2.00% or more below the previous close (as shown, rounded to
   0.01%), once per trading day. Tiers: −2% Sharp, −3% Very sharp, −5% Extreme fall. In 2008–2026:
   208 / 82 / 19 days. On by default.
+- **Volatility curve inverted** (0.23): VIX/VIX3M at 1.00 or above (as shown, two decimals), then
+  again only after it has been at 0.90 or below: 57 notices in 2008–2026, about 3 a year. On by
+  default. Never changes the suggested state.
+- **Only background checks mark a change as notified** (0.23). Opening the app shows it but does
+  not use up its notification.
 - **Two background checks:**
-  - **Early check** (`work/EarlyCheckWorker.kt`): US weekdays at 20:30 New York time (03:30
-    Helsinki; 02:30 in the weeks of spring and autumn when only one of the two is on summer time). Downloads only the S&P 500
-    (one small request), because FRED adds it about 4 hours after the close but VIX/VIX3M only
-    about 16:30–17:00 Helsinki the next day. Retries hourly until the close is there or 03:30 New
-    York time (10:30 Helsinki). Runs the sharp-fall and below-200-day-average rules on it.
-  - **Full check** (`work/DailyCheckWorker.kt`): twice a day, everything; states and economy flags.
+  - **Early check** (`work/EarlyCheckWorker.kt`): an hourly job that downloads only from 20:30
+    New York time on US weekdays (03:30 Helsinki; 02:30 in the weeks of spring and autumn when only
+    one of the two is on summer time) until 03:30 New York time (10:30 Helsinki), and only until a
+    background check has seen that day's close. Downloads only the S&P 500 (one small request),
+    because FRED adds it about 4 hours after the close but VIX/VIX3M only about 16:30–17:00
+    Helsinki the next day. Runs the sharp-fall and below-200-day-average rules on it. (Up to 0.22
+    each run queued the next behind itself, and restarted runs made the queue fall days behind.)
+  - **Full check** (`work/DailyCheckWorker.kt`): about every 12 hours, everything; states,
+    economy flags and the volatility curve.
 
 **Test** (one per switch) works at once, offline too:
 
@@ -151,7 +160,7 @@ Not investment advice.
    a different state (Panic, or No panic if today is Panic) and no flags; for the 200-day test, a
    previous close above the average. If today's close is above the average, a simulated close 2%
    below it is used; if no economy flag is on, a test flag; if today's change is not a sharp fall,
-   a previous close 2.5% higher. Outside 08:00–18:00 the test is held until 08:00 (said under the
+   a previous close 2.5% higher; if the latest VIX/VIX3M is below 1.00, an inversion of 1.05. Outside 08:00–18:00 the test is held until 08:00 (said under the
    switch).
 2. Runs the same rules and posts "Test: …" on the same notification type as the real one, with
    separate notification IDs. Nothing is saved, so real notifications are unaffected.
@@ -160,7 +169,7 @@ Not investment advice.
    notifications off, or this type off), with a button to open notification settings.
 
 Settings also shows the **last background check**: when it ran and what it did (no change,
-notified, blocked, failed).
+notified, held, blocked, failed), and **Show check log** lists the last 30 (since 0.23).
 
 ## Why the History slider is smooth
 

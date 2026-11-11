@@ -15,14 +15,15 @@ object CheckRunner {
     fun run(ctx: Context, priceOnly: Boolean): Outcome {
         val settings = Settings(ctx)
         val repo = SignalRepository(ctx)
-        val r = if (priceOnly) repo.refreshPriceOnly() else repo.refresh()
+        val r = if (priceOnly) repo.refreshPriceOnly() else repo.refresh(save = true)
         val today = r.today ?: return Outcome("No data from FRED yet.", null)
         val price = r.price ?: today.price()
         val notices = NotificationRules.evaluate(
-            NotificationRules.Previous(r.previousState, r.previousFlags, r.previousBelowSma, r.previousSharpFallDate),
-            NotificationRules.now(today, r.flags, price),
+            NotificationRules.Previous(r.previousState, r.previousFlags, r.previousBelowSma, r.previousSharpFallDate,
+                r.previousInversionDate),
+            NotificationRules.now(today, r.flags, price, r.inversion),
             notifyState = settings.notifications, notifyBelowSma = settings.notifyBelowSma,
-            notifySharpFall = settings.notifySharpFall)
+            notifySharpFall = settings.notifySharpFall, notifyCurve = settings.notifyCurve)
         val est = if (price.estimated) " (estimate from VOO)" else ""
         val data = if (price.date != today.date)
             "S&P 500 to ${Explain.dmy(price.date)}$est, VIX to ${Explain.dmy(today.date)}, ${today.label}"

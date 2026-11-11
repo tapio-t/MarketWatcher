@@ -20,6 +20,11 @@ object NotificationRules {
         val state: State?, val flags: Set<String>, val belowSma: Boolean?,
         /** The last trading day whose sharp fall was already seen (notified at most once). */
         val sharpFallDate: String? = null,
+        /**
+         * The date of the last volatility-curve inversion already seen ("" = none seen yet; null =
+         * not known yet, e.g. the first check after installing: nothing is notified then).
+         */
+        val inversionDate: String? = null,
     )
 
     /**
@@ -41,6 +46,8 @@ object NotificationRules {
         val estimated: Boolean = false,
         /** An estimated day that is a VOO ex-dividend day. */
         val exDividend: Boolean = false,
+        /** The latest volatility-curve inversion in the readings (see [lastInversion]), or null. */
+        val inversion: Inversion? = null,
     ) {
         val belowSma: Boolean? get() = sma?.let { spx < it }
         val change: Double? get() = prevClose?.let { spx / it - 1 }
@@ -48,12 +55,16 @@ object NotificationRules {
 
     data class Notice(val id: Int, val title: String, val text: String)
 
-    enum class Kind { STATE, BELOW_SMA, SHARP_FALL }
+    /** A day when VIX/VIX3M reached 1.00 (as shown) after being at 0.90 or below. */
+    data class Inversion(val date: String, val ratio: Double, val vix: Double?, val vix3m: Double?)
+
+    enum class Kind { STATE, BELOW_SMA, SHARP_FALL, CURVE }
 
     const val ID_STATE = 1
     const val ID_ECONOMY = 2
     const val ID_BELOW_SMA = 3
     const val ID_SHARP_FALL = 4
+    const val ID_CURVE = 5
     /** Test notices use their own ids so they never replace or hide a real one. */
     const val TEST_ID_OFFSET = 100
 
@@ -61,6 +72,7 @@ object NotificationRules {
     const val CHANNEL_STATE = "state_economy"
     const val CHANNEL_BELOW_SMA = "below_sma"
     const val CHANNEL_SHARP_FALL = "sharp_fall"
+    const val CHANNEL_CURVE = "vix_curve"
     /** The old default-importance channel (versions up to 0.8); removed on start. */
     const val LEGACY_CHANNEL = "market_state"
 
@@ -68,12 +80,14 @@ object NotificationRules {
     fun channelOf(noticeId: Int): String = when (noticeId % TEST_ID_OFFSET) {
         ID_BELOW_SMA -> CHANNEL_BELOW_SMA
         ID_SHARP_FALL -> CHANNEL_SHARP_FALL
+        ID_CURVE -> CHANNEL_CURVE
         else -> CHANNEL_STATE
     }
 
     fun channelOf(kind: Kind): String = when (kind) {
         Kind.BELOW_SMA -> CHANNEL_BELOW_SMA
         Kind.SHARP_FALL -> CHANNEL_SHARP_FALL
+        Kind.CURVE -> CHANNEL_CURVE
         Kind.STATE -> CHANNEL_STATE
     }
 
@@ -89,9 +103,39 @@ object NotificationRules {
     fun flagNotes(c: Context): Map<String, String> = flagsOn(c).zip(c.notes).toMap()
 
     /** [price]: the newest S&P 500 close (a price-only day when VIX is not published yet). */
-    fun now(r: Reading, flags: Set<String>, price: PriceView = r.price()) =
+    fun now(r: Reading, flags: Set<String>, price: PriceView = r.price(), inversion: Inversion? = null) =
         Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate,
-            price.estimated, price.exDividend)
+            price.estimated, price.exDividend, inversion)
+
+    /** VIX/VIX3M at or above this, as shown (two decimals), is an inverted curve. */
+    const val CURVE_ON = 1.00
+    /** After a notice, the next one needs VIX/VIX3M back at or below this first (about 3 notices a year in 2008–2026). */
+    const val CURVE_REARM = 0.90
+
+    /** The VIX/VIX3M of [r] as an [Inversion] candidate. */
+    fun curvePoint(r: Reading) = Inversion(r.date, r.vixRatio, r.vix, r.vix3m)
+
+    /** The latest inversion in [readings] (oldest first), or null if none. */
+    fun lastInversion(readings: List<Reading>): Inversion? = lastInversionOf(readings.map(::curvePoint))
+
+    /**
+     * Walks the days (oldest first): an inversion is a day with VIX/VIX3M ≥ [CURVE_ON] while armed;
+     * it disarms until a day at or below [CURVE_REARM]. Compared as shown, in hundredths.
+     */
+    fun lastInversionOf(days: List<Inversion>): Inversion? = inversionsOf(days).lastOrNull()
+
+    /** Every inversion in [days] (oldest first), by the rule of [lastInversionOf]. */
+    fun inversionsOf(days: List<Inversion>): List<Inversion> {
+        var armed = true
+        val out = mutableListOf<Inversion>()
+        for (d in days) {
+            if (d.ratio.isNaN()) continue
+            val shown = Math.round(d.ratio * 100)
+            if (armed && shown >= Math.round(CURVE_ON * 100)) { out += d; armed = false }
+            else if (shown <= Math.round(CURVE_REARM * 100)) armed = true
+        }
+        return out
+    }
 
     /** " (estimate)" after a price notification's title when the close is estimated from VOO. */
     private fun Now.mark() = if (estimated) " (estimate)" else ""
@@ -105,10 +149,11 @@ object NotificationRules {
      *  - state change, except No panic ↔ Pullback (needs a known previous state);
      *  - an economy flag that was off and is now on;
      *  - first close below the 200-day average; again only after a close back above it;
-     *  - a sharp fall (−2.00% or worse vs the previous close), once per trading day.
+     *  - a sharp fall (−2.00% or worse vs the previous close), once per trading day;
+     *  - a volatility-curve inversion newer than the last one seen (needs a known previous check).
      */
     fun evaluate(prev: Previous, now: Now, notifyState: Boolean, notifyBelowSma: Boolean,
-                 notifySharpFall: Boolean = false): List<Notice> = buildList {
+                 notifySharpFall: Boolean = false, notifyCurve: Boolean = false): List<Notice> = buildList {
         if (notifyState) {
             val p = prev.state
             if (p != null && p != now.state && !(p in QUIET && now.state in QUIET)) {
@@ -137,6 +182,18 @@ object NotificationRules {
                 add(Notice(ID_SHARP_FALL, "${fall.title}${now.mark()}: S&P 500 ${pct2(ch)} on ${Explain.dmy(now.date)}",
                     now.estimateNote() + String.format(Locale.US, "Close %,.0f, previous close %,.0f on %s. ", now.spx, now.prevClose, Explain.dmy(now.prevDate)) +
                         "Tiers: −2% sharp, −3% very sharp, −5% extreme. In 2008–2026 the S&P 500 fell 2% or more on about 4% of days."))
+            }
+        }
+        if (notifyCurve) {
+            val inv = now.inversion
+            val seen = prev.inversionDate
+            if (inv != null && seen != null && inv.date > seen) {
+                val values = if (inv.vix != null && inv.vix3m != null)
+                    String.format(Locale.US, "VIX %.2f is above VIX3M %.2f: ", inv.vix, inv.vix3m) else ""
+                add(Notice(ID_CURVE, String.format(Locale.US, "Volatility curve inverted: VIX/VIX3M %.2f on %s", inv.ratio, Explain.dmy(inv.date)),
+                    values + "near-term expected volatility is higher than the 3-month one. The suggested state " +
+                        "changes only inside a dip (7% or more below the high): ${now.state.label}. " +
+                        String.format(Locale.US, "The next notice comes after VIX/VIX3M has been at %.2f or below.", CURVE_REARM)))
             }
         }
     }
@@ -175,6 +232,14 @@ object NotificationRules {
                 evaluate(Previous(null, emptySet(), null, sharpFallDate = null), n, notifyState = false,
                     notifyBelowSma = false, notifySharpFall = true)
                     .map { if (!real) it.copy(text = "Simulated previous close (today's real change is not a sharp fall). " + it.text) else it }
+            }
+            Kind.CURVE -> {
+                // If the latest reading is not inverted, simulate VIX/VIX3M 1.05 on today's date.
+                val real = now.inversion != null
+                val n = if (real) now else now.copy(inversion = Inversion(now.date, 1.05, null, null))
+                evaluate(Previous(null, emptySet(), null, inversionDate = ""), n, notifyState = false,
+                    notifyBelowSma = false, notifyCurve = true)
+                    .map { if (!real) it.copy(text = "Simulated inversion (the latest VIX/VIX3M is below 1.00). " + it.text) else it }
             }
         }
         return notices.map { it.copy(id = it.id + TEST_ID_OFFSET, title = "Test: " + it.title) }

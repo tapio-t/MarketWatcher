@@ -16,7 +16,7 @@ import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 /**
- * The full check, twice a day. FRED adds the S&P 500 close about 03:00 Helsinki the night after the
+ * The full check, about every 12 hours. FRED adds the S&P 500 close about 03:00 Helsinki the night after the
  * US close, VIX and VIX3M about 16:30–17:00 Helsinki the next day; a new reading needs all three.
  * The S&P 500 close alone is picked up earlier by [EarlyCheckWorker]. The rules live in
  * [NotificationRules]; [CheckRunner] fetches data, applies them and shows or holds the notices
