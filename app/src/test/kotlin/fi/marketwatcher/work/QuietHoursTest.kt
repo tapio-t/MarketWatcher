@@ -39,7 +39,9 @@ class QuietHoursTest {
 
     @Test fun earlyCheckWindow() {
         // Friday 16.10.2026: the window for Friday's close is 03:30–10:30 Saturday Helsinki (EEST).
-        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-16T08:40")))
+        // 08:40 Friday Helsinki is 01:40 New York: still Thursday night's window.
+        assertEquals("2026-10-15", EarlySchedule.expectedAt(at("2026-10-16T08:40")))
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-16T12:00")))
         assertEquals(null, EarlySchedule.expectedAt(at("2026-10-17T03:29")))
         assertEquals("2026-10-16", EarlySchedule.expectedAt(at("2026-10-17T03:30")))
         assertEquals("2026-10-16", EarlySchedule.expectedAt(at("2026-10-17T10:29")))
