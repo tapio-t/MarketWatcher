@@ -19,8 +19,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The early check (see [EarlySchedule]): runs every hour, but downloads only inside the window after
- * the US close (03:30–10:30 Helsinki on weekday nights) and only until a background check has seen
- * that day's S&P 500 close. Downloads only the S&P 500, so the sharp-fall and 200-day-average
+ * the US close (23:30–03:30 Helsinki for VOO's close with an Alpha Vantage key, 03:30–10:30 for FRED's,
+ * on weekday nights) and only until a background check has seen that day's FRED S&P 500 close. Downloads only the S&P 500, so the sharp-fall and 200-day-average
  * notices do not wait ~13 hours for VIX. Notifications found at night are held until 08:00 by
  * [NotificationGate].
  *
@@ -34,14 +34,21 @@ class EarlyCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val ctx = applicationContext
         val settings = Settings(ctx)
         if (!settings.hasApiKey) return@withContext Result.success()
-        val expected = EarlySchedule.expectedAt(ZonedDateTime.now()) ?: return@withContext Result.success()
-        val checked = SignalRepository(ctx).checkedPriceDate()
+        val window = EarlySchedule.windowAt(ZonedDateTime.now()) ?: return@withContext Result.success()
+        val expected = window.expected
+        val repo = SignalRepository(ctx)
+        val checked = repo.checkedPriceDate()
         if (checked != null && checked >= expected) return@withContext Result.success()
+        // Before FRED's close is due, only a new VOO close can change anything (0.24).
+        if (window.vooOnly && (!settings.hasAvKey || repo.hasVooClose(expected))) return@withContext Result.success()
         try {
             val o = CheckRunner.run(ctx, priceOnly = true)
             val ok = o.priceDate != null && o.priceDate >= expected
-            settings.recordCheck(Instant.now(), if (ok) o.text
-                else "Early check: FRED has no S&P 500 close for ${Explain.dmy(expected)} yet. " + o.text)
+            settings.recordCheck(Instant.now(), when {
+                ok -> o.text
+                window.vooOnly -> "Evening check (VOO estimate for ${Explain.dmy(expected)}): " + o.text
+                else -> "Early check: FRED has no S&P 500 close for ${Explain.dmy(expected)} yet. " + o.text
+            })
         } catch (e: Exception) {
             settings.recordCheck(Instant.now(), "Early check failed: ${e.message ?: e.javaClass.simpleName}")
         }

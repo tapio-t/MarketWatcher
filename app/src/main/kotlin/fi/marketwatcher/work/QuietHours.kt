@@ -37,27 +37,37 @@ object QuietHours {
 }
 
 /**
- * When the early check works: from 20:30 New York time on a US weekday (about 4.5 hours after the
- * close and half an hour after FRED usually adds the S&P 500 close; 03:30 Helsinki) until 03:30 New
- * York time the next morning (10:30 Helsinki). The hourly job does nothing outside this window or
- * once a background check has seen that day's close. Computed in New York time, so both
- * daylight-saving changes are handled.
+ * When the early check works, in New York time (both daylight-saving changes are handled):
+ *  - 16:30–20:30 on a US weekday (23:30–03:30 Helsinki): VOO's close only, for the evening estimate
+ *    of the sharp-fall Panic (0.24); needs an Alpha Vantage key;
+ *  - 20:30 (half an hour after FRED usually adds the S&P 500 close; 03:30 Helsinki) until 03:30 the
+ *    next morning (10:30 Helsinki): FRED's close.
+ * The hourly job does nothing outside these hours or once a background check has seen that day's
+ * FRED close.
  */
 object EarlySchedule {
     val NEW_YORK: java.time.ZoneId = java.time.ZoneId.of("America/New_York")
+    val VOO_FROM: LocalTime = LocalTime.of(16, 30)
     val START_AT: LocalTime = LocalTime.of(20, 30)
     val GIVE_UP_AT: LocalTime = LocalTime.of(3, 30)   // the next morning, New York time
     const val INTERVAL_MINUTES = 60L
 
+    /** [vooOnly]: before FRED's close is due; only a VOO estimate can be new. */
+    data class Window(val expected: String, val vooOnly: Boolean)
+
     /** The trading day whose close the early check looks for at [now] (any zone), or null outside the window. */
-    fun expectedAt(now: ZonedDateTime): String? {
+    fun windowAt(now: ZonedDateTime): Window? {
         val ny = now.withZoneSameInstant(NEW_YORK)
         for (d in listOf(ny.toLocalDate(), ny.toLocalDate().minusDays(1))) {
             if (d.dayOfWeek.value > 5) continue
+            val voo = d.atTime(VOO_FROM).atZone(NEW_YORK)
             val start = d.atTime(START_AT).atZone(NEW_YORK)
             val end = d.plusDays(1).atTime(GIVE_UP_AT).atZone(NEW_YORK)
-            if (!ny.isBefore(start) && ny.isBefore(end)) return d.toString()
+            if (!ny.isBefore(voo) && ny.isBefore(end)) return Window(d.toString(), vooOnly = ny.isBefore(start))
         }
         return null
     }
+
+    /** The FRED close the early check looks for at [now], or null when it doesn't (VOO-only hours included). */
+    fun expectedAt(now: ZonedDateTime): String? = windowAt(now)?.takeIf { !it.vooOnly }?.expected
 }

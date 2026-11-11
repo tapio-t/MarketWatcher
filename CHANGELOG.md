@@ -2,6 +2,21 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.24 (11.11.2026)
+- New engine rule, sharp-fall Panic: a day change of −3.00% or worse shows "Suggested: Panic" until
+  the first later day at −0.25% or better. Only over No panic, Pullback and Bear grind (inside a
+  panic cycle the engine's own state stays), and it does not count as panic in a dip for the
+  fading and new-wave checks. Changed in `python/engine_v4.py` and `SignalEngine.kt`; new golden data:
+  Panic on 8 more days in 2008–2026 (24.06.2016, 27.06.2016, 10.10.2018, 11.10.2018, 24.02.2020,
+  03.09.2020, 04.09.2020, 08.09.2020); nothing else changes.
+- The rule also runs on S&P 500 closes newer than the last VIX day: from FRED's close (about 03:00
+  Helsinki) and from the VOO estimate on the evening of the fall ("Suggested: Panic (estimate)",
+  notified at 08:00 with "(estimate)"). FRED's close confirms or drops it. Estimates never reach the
+  engine's own rules or History.
+- VOO's close is looked for from 16:30 New York time (23:30 Helsinki) instead of 18:00, and the
+  hourly early check asks for it from then on weekday evenings (with an Alpha Vantage key).
+- The "why" dialog lists the sharp-fall rule after the engine's rules, with the fall it uses.
+
 ## 0.23 (11.11.2026)
 - The early check (S&P 500 only, weekday nights) runs again on time. Up to 0.22 each run queued
   the next one behind itself; when Android stopped and restarted a run, the next one was queued

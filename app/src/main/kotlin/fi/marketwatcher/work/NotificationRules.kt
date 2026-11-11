@@ -48,6 +48,10 @@ object NotificationRules {
         val exDividend: Boolean = false,
         /** The latest volatility-curve inversion in the readings (see [lastInversion]), or null. */
         val inversion: Inversion? = null,
+        /** [state] comes from the sharp-fall rule on a VOO estimate (0.24). */
+        val stateEstimated: Boolean = false,
+        /** Set when [state] is Panic from the sharp-fall rule: what happened, for the notification text. */
+        val sharpFallNote: String? = null,
     ) {
         val belowSma: Boolean? get() = sma?.let { spx < it }
         val change: Double? get() = prevClose?.let { spx / it - 1 }
@@ -105,7 +109,14 @@ object NotificationRules {
     /** [price]: the newest S&P 500 close (a price-only day when VIX is not published yet). */
     fun now(r: Reading, flags: Set<String>, price: PriceView = r.price(), inversion: Inversion? = null) =
         Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate,
-            price.estimated, price.exDividend, inversion)
+            price.estimated, price.exDividend, inversion, r.stateEstimated, sharpFallNote(r))
+
+    /** The notification text of a Panic shown by the sharp-fall rule, or null. */
+    fun sharpFallNote(r: Reading): String? {
+        if (!r.sharpFallPanic || r.fallChange == null || r.fallDate == null) return null
+        return "Very sharp fall: S&P 500 ${pct2(r.fallChange)} on ${Explain.dmy(r.fallDate)}. Panic is shown until a " +
+            "day closes at −0.25% or better. It doesn't count as panic in a dip for the later fading check."
+    }
 
     /** VIX/VIX3M at or above this, as shown (two decimals), is an inverted curve. */
     const val CURVE_ON = 1.00
@@ -157,7 +168,9 @@ object NotificationRules {
         if (notifyState) {
             val p = prev.state
             if (p != null && p != now.state && !(p in QUIET && now.state in QUIET)) {
-                add(Notice(ID_STATE, now.state.label, now.state.message))
+                add(Notice(ID_STATE, now.state.label + if (now.stateEstimated) " (estimate)" else "",
+                    (if (now.stateEstimated) "Estimated from VOO; FRED has not published the close yet. " else "") +
+                        (now.sharpFallNote ?: now.state.message)))
             }
             val newFlags = now.flags - prev.flags
             if (newFlags.isNotEmpty()) {

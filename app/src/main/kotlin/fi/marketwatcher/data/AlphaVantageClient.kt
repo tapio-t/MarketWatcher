@@ -112,17 +112,21 @@ object AvBudget {
     /** Dividends are re-read weekly. */
     const val DIVIDENDS_DAYS = 7L
     val NEW_YORK: java.time.ZoneId = java.time.ZoneId.of("America/New_York")
+    /** VOO's daily close is looked for from this time, New York. */
+    val CLOSES_AVAILABLE: java.time.LocalTime = java.time.LocalTime.of(16, 30)
 
     fun allowed(lastAtMs: Long, day: String?, count: Int, nowMs: Long, today: String): Boolean =
         nowMs - lastAtMs >= MIN_MINUTES * 60_000 && (day != today || count < MAX_PER_DAY)
 
     /**
-     * The newest US weekday whose close should exist at [now]: today after 18:00 New York time, else
-     * the weekday before (market holidays are not known; the request limits cover them).
+     * The newest US weekday whose close should exist at [now]: today from 16:30 New York time (half an
+     * hour after the close; 23:30 Helsinki), else the weekday before (market holidays are not known;
+     * the request limits cover them). Until 0.23 this was 18:00; 0.24 moved it earlier so the
+     * sharp-fall Panic can show an estimate on the evening of the fall.
      */
     fun expectedDate(now: java.time.ZonedDateTime): String {
         val ny = now.withZoneSameInstant(NEW_YORK)
-        var d = if (ny.toLocalTime() >= java.time.LocalTime.of(18, 0)) ny.toLocalDate() else ny.toLocalDate().minusDays(1)
+        var d = if (ny.toLocalTime() >= CLOSES_AVAILABLE) ny.toLocalDate() else ny.toLocalDate().minusDays(1)
         while (d.dayOfWeek.value > 5) d = d.minusDays(1)
         return d.toString()
     }

@@ -11,6 +11,9 @@ What changed from v2b
     closes above a rising 200-day SMA.
   * NEW_WAVE (was SECOND_LEG) also fires when VIX exceeds the dip's earlier
     VIX peak after a fade, even while the 200-day SMA is still rising.
+  * Sharp-fall panic (MarketWatcher 0.24): a day change of -3.00% or worse turns Panic on
+    until the first later day at -0.25% or better. It is shown only over No panic, Pullback
+    and Bear grind, and does not feed the dip's own panic cycle (fading, new wave).
   * A context layer (credit stress, recession, rate shock, valuation) is
     reported next to the state. It does NOT change the state: it has not
     been backtested yet.
@@ -23,6 +26,7 @@ As-published context: nfci, nfci_prev                     (NFCI, weekly, +5 days
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
@@ -42,6 +46,9 @@ RELAPSE_RATIO = 1.05       # re-inversion needed after a fade
 RELAPSE_VIX_FRACTION = 0.90
 UPTREND_MIN_DD = -0.10     # uptrend rule needs a dip of at least 10%
 UPTREND_DAYS = 10          # consecutive closes above a rising SMA200
+FALL_PANIC_BP = -300       # sharp-fall panic: day change -3.00% or worse (as shown, 0.01%)
+FALL_PANIC_OFF_BP = -25    # ... until a later day at -0.25% or better
+FALL_PANIC_OVER = {"CALM", "PULLBACK", "BEAR_GRIND"}   # states the sharp-fall panic is shown over
 ENTER_DAYS = 2             # hysteresis for non-urgent states
 LOOKBACK = 252
 SMA_LEN = 200
@@ -141,6 +148,8 @@ class Reading:
     uptrend_run: int
     context: Context
     reasons: List[str] = field(default_factory=list)
+    base_state: str = ""          # the state before the sharp-fall panic rule
+    fall_panic_on: bool = False   # the sharp-fall panic rule is on after this day
 
     def to_dict(self):
         return asdict(self)
@@ -186,6 +195,20 @@ def context_for(d: Day) -> Context:
     return Context(credit, rec, rate, val, notes)
 
 
+def day_change_bp(close: float, prev: float) -> int:
+    """Day change in basis points (0.01%), rounded half up like Kotlin's Math.round."""
+    return math.floor((close / prev - 1) * 10000 + 0.5)
+
+
+def fall_panic_step(on: bool, bp: int) -> bool:
+    """The sharp-fall panic flag after a day with change [bp]."""
+    if bp <= FALL_PANIC_BP:
+        return True
+    if on and bp >= FALL_PANIC_OFF_BP:
+        return False
+    return on
+
+
 def _pct_rank(window: List[float], x: float) -> float:
     return sum(1 for v in window if v <= x) / len(window)
 
@@ -216,8 +239,15 @@ def run(days: List[Day]) -> List[Reading]:
 
     state = "CALM"
     pending, pending_count = None, 0
+    fall_on = False
+    fall_date, fall_bp = None, 0
 
     for i, d in enumerate(days):
+        if i > 0:
+            bp = day_change_bp(d.spx, days[i - 1].spx)
+            if bp <= FALL_PANIC_BP:
+                fall_date, fall_bp = d.date, bp
+            fall_on = fall_panic_step(fall_on, bp)
         ath = max(ath, d.spx)
         s = sma(i)
         s_prev = sma(i - SMA_SLOPE_DAYS) if i >= SMA_SLOPE_DAYS else None
@@ -352,9 +382,15 @@ def run(days: List[Day]) -> List[Reading]:
             if pending_count >= ENTER_DAYS:
                 state, pending, pending_count = raw, None, 0
 
+        shown = state
+        if fall_on and state in FALL_PANIC_OVER:
+            shown = "PANIC"
+            reasons.append(f"Very sharp fall: S&P 500 {fall_bp / 100:+.2f}% on {fall_date}; "
+                           f"Panic until a day closes at -0.25% or better")
+
         out.append(Reading(
-            date=d.date, state=state, raw_state=raw, label=label(state),
-            message=MESSAGES[state], spx=d.spx, vix=d.vix, vix3m=d.vix3m,
+            date=d.date, state=shown, raw_state=raw, label=label(shown),
+            message=MESSAGES[shown], base_state=state, fall_panic_on=fall_on, spx=d.spx, vix=d.vix, vix3m=d.vix3m,
             drawdown=dd, ath=ath, vix_ratio=ratio, vix_pct=vpct, sma200=s,
             sma200_rising=rising, dist_sma200=dist, episode_active=active,
             episode_low=ep_low, episode_max_dd=ep_max_dd if active else None,

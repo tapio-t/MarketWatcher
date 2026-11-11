@@ -308,8 +308,11 @@ internal fun StateBox(r: Reading, large: Boolean, onClick: () -> Unit, modifier:
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(r.label, color = col, fontSize = if (large) 24.sp else 17.sp, fontWeight = FontWeight.Bold)
-                // Today, when the S&P 500 tiles are newer: the state is for the last day with VIX.
-                if (showDate) Text("for ${dmy(r.date)} · waiting for VIX of newer days", color = col, fontSize = 12.sp)
+                // Today, when the S&P 500 tiles are newer: the state is for the last day with VIX,
+                // unless the sharp-fall rule changed it on a newer close.
+                if (r.stateAsOf != null) Text("sharp fall rule, S&P 500 close of ${dmy(r.stateAsOf)}" +
+                    (if (r.stateEstimated) " (VOO estimate)" else "") + " · waiting for VIX", color = col, fontSize = 12.sp)
+                else if (showDate) Text("for ${dmy(r.date)} · waiting for VIX of newer days", color = col, fontSize = 12.sp)
             }
             Box(Modifier.size(if (large) 30.dp else 26.dp).background(col.copy(alpha = 0.2f), CircleShape),
                 contentAlignment = Alignment.Center) {
@@ -323,9 +326,11 @@ internal fun StateBox(r: Reading, large: Boolean, onClick: () -> Unit, modifier:
 @Composable
 internal fun WhyDialog(r: Reading, onClose: () -> Unit) {
     val col = palette().of(r.state)
-    val steps = remember(r) { Explain.steps(r) }
+    // The engine's rules in order, then the sharp-fall rule, which can show Panic over their result.
+    val steps = remember(r) { Explain.steps(r) + Explain.sharpFall(r) }
     val notes = remember(r) { Explain.notes(r) }
-    AppDialog(r.label, col, "Reading for ${dmy(r.date)}. Rules are checked from the top; the first that applies sets the state.",
+    AppDialog(r.label, col, "Reading for ${dmy(r.date)}. Rules are checked from the top; the first that applies sets the state, " +
+        "and the sharp-fall rule at the end can show Panic over it.",
         onClose) {
         steps.forEach { s -> StepRow(s, col) }
         Spacer(Modifier.size(6.dp))

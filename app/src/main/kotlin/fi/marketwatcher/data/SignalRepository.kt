@@ -288,6 +288,9 @@ class SignalRepository(private val context: Context) {
      */
     fun checkedPriceDate(): String? = memory.getString("checked_price_date", null)
 
+    /** VOO's close for [date] is already saved. */
+    fun hasVooClose(date: String): Boolean = date in voo.closes()
+
     /** Cache + bundled history only: works offline and before an API key is set. */
     fun fromCache(): Result {
         settings.migrateKey()
@@ -375,14 +378,17 @@ class SignalRepository(private val context: Context) {
         val liveLast = live.lastOrNull()?.date
         // Saved VOO closes estimate the S&P 500 after FRED's last close (also after the key is removed).
         val estimates = VooEstimate.after(v(Series.SP500), voo.closes(), voo.dividends())
+        val prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList()
         return Result(
-            today = if (liveLast != null) readings.lastOrNull() else null,
+            // The sharp-fall Panic rule continues on newer closes (FRED before VIX, or VOO estimates);
+            // History keeps the engine's own readings.
+            today = if (liveLast != null) readings.lastOrNull()?.let { SignalEngine.withPrices(it, prices) } else null,
             history = readings,
             series = data.map { (s, c) -> SeriesStatus(s, c.lastDate, c.fetchedAt) },
             previousState = memory.getString("state", null)?.let { runCatching { State.valueOf(it) }.getOrNull() },
             previousFlags = memory.getStringSet("flags", emptySet()).orEmpty(),
             previousBelowSma = if (memory.contains("below_sma")) memory.getBoolean("below_sma", false) else null,
-            prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList(),
+            prices = prices,
             previousSharpFallDate = memory.getString("sharp_fall_date", null),
             fredPriceDate = data.getValue(Series.SP500).lastDate,
             previousInversionDate = memory.getString("inversion_date", null),
