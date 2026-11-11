@@ -2,6 +2,20 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.23 (11.11.2026)
+- The early check (S&P 500 only, weekday nights) runs again on time. Up to 0.22 each run queued
+  the next one behind itself; when Android stopped and restarted a run, the next one was queued
+  twice and the waits added up (on 11.11.2026 the check for 09.11 was waiting until 13.11). It is
+  now one hourly job that downloads only from 03:30 to 10:30 Helsinki time on weekday nights, and
+  only until a background check has seen that day's close. The old queue is cancelled on start.
+- Opening the app no longer marks a state change, economy flag, 200-day average crossing or
+  sharp fall as notified: only background checks do. On 06.11.2026 the −4.36% fall of 05.11 was
+  downloaded first by the app and no notification followed.
+- New notification type "Volatility curve inverted": when VIX/VIX3M reaches 1.00 (as shown), then
+  again only after it has been at 0.90 or below (57 times in 2008–2026, about 3 a year). On by
+  default; it never changes the suggested state, which reads panic only inside a dip.
+- Settings: "Show check log" lists the last 30 background check results with their times.
+
 ## 0.22 (06.11.2026)
 - The CAPE check finds ie_data.xls on shillerdata.com again. The site now links it without
   "https:" (`//img1.wsimg.com/…`), which the app didn't recognise ("Couldn't find ie_data.xls").

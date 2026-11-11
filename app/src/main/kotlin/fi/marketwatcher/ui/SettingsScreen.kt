@@ -81,6 +81,8 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
     var notify by remember { mutableStateOf(settings.notifications) }
     var notifySma by remember { mutableStateOf(settings.notifyBelowSma) }
     var notifySharp by remember { mutableStateOf(settings.notifySharpFall) }
+    var notifyCurve by remember { mutableStateOf(settings.notifyCurve) }
+    var showLog by remember { mutableStateOf(false) }
     var held by remember { mutableStateOf(NotificationGate.held(ctx)) }
     val results = remember { mutableStateMapOf<Kind, TestResult>() }
     // Which test (if any) waits for the permission answer; null when a switch asked for it.
@@ -98,13 +100,16 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
         Kind.STATE -> settings.notifications
         Kind.BELOW_SMA -> settings.notifyBelowSma
         Kind.SHARP_FALL -> settings.notifySharpFall
+        Kind.CURVE -> settings.notifyCurve
     }
 
     /** Builds the test from today's data with the shared rules, posts it, then checks Android shows it. */
     fun runTest(kind: Kind) {
         val r = latest ?: run { results[kind] = TestResult("Nothing to test yet: no data has been loaded."); return }
         val p = price ?: r.price()
-        val notices = NotificationRules.test(kind, NotificationRules.now(r, SignalRepository.flagsOf(r), p))
+        // The latest reading itself, if its curve is inverted (as shown); otherwise the test simulates one.
+        val inversion = NotificationRules.curvePoint(r).takeIf { Math.round(it.ratio * 100) >= Math.round(NotificationRules.CURVE_ON * 100) }
+        val notices = NotificationRules.test(kind, NotificationRules.now(r, SignalRepository.flagsOf(r), p, inversion))
         if (notices.isEmpty()) {
             results[kind] = TestResult(if (kind == Kind.SHARP_FALL) "Nothing to test yet: no previous close is available."
                 else "Nothing to test yet: the 200-day average is not available.")
@@ -187,6 +192,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
             Kind.STATE -> { notify = on; settings.notifications = on }
             Kind.BELOW_SMA -> { notifySma = on; settings.notifyBelowSma = on }
             Kind.SHARP_FALL -> { notifySharp = on; settings.notifySharpFall = on }
+            Kind.CURVE -> { notifyCurve = on; settings.notifyCurve = on }
         }
         if (on && Notifier.needsPermission(ctx)) requestPermission(null)
     }
@@ -210,17 +216,35 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
             text = "Notify sharp daily falls (S&P 500 −2% or worse)",
             checked = notifySharp, onChange = { setSwitch(Kind.SHARP_FALL, it) },
             result = results[Kind.SHARP_FALL], onTest = { test(Kind.SHARP_FALL) }, onOpenSettings = ::openNotificationSettings)
+        NotificationSetting(
+            text = "Notify when the volatility curve inverts (VIX/VIX3M 1.00 or above; again after 0.90 or below)",
+            checked = notifyCurve, onChange = { setSwitch(Kind.CURVE, it) },
+            result = results[Kind.CURVE], onTest = { test(Kind.CURVE) }, onOpenSettings = ::openNotificationSettings)
         Text(QuietHours.TEXT, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         if (held.isNotEmpty()) Text("Held until 08:00: " + held.joinToString("; ") { it.title },
             fontSize = 12.sp, color = palette().warn)
         Text("Test builds a notification by the same rules as real ones from the latest data in the app. Only the " +
-            "previous check is simulated (and, if needed, a close below the average, a sharp fall or an economy " +
-            "flag). Test notifications start with \"Test:\" and nothing is saved, so real notifications are not " +
+            "previous check is simulated (and, if needed, a close below the average, a sharp fall, an inverted " +
+            "volatility curve or an economy flag). Test notifications start with \"Test:\" and nothing is saved, so real notifications are not " +
             "affected.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val at = settings.lastCheckAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).format(CHECK_TIME) }.getOrNull() }
-        Text("Last background check (full check twice a day; S&P 500 only at about 03:30 on weekday nights): " +
+        Text("Last background check (full check about every 12 hours; S&P 500 only, hourly from 03:30 to 10:30 " +
+            "on weekday nights until FRED has the close): " +
             if (at == null) "not run yet." else "$at — ${settings.lastCheckResult.orEmpty()}",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Only background checks mark a change as notified; opening the app does not.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { showLog = !showLog }) {
+            Text(if (showLog) "Hide check log" else "Show check log (last ${Settings.CHECK_LOG_SIZE})")
+        }
+        if (showLog) {
+            val log = remember { settings.checkLog() }
+            if (log.isEmpty()) Text("No checks recorded yet.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            log.forEach { e ->
+                val t = runCatching { Instant.parse(e.at).atZone(ZoneId.systemDefault()).format(CHECK_TIME) }.getOrDefault(e.at)
+                Text("$t — ${e.text}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
 
         Heading("Data sources")
         DataSources()

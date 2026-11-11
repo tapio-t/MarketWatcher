@@ -118,7 +118,7 @@ private fun App(repo: SignalRepository, settings: Settings) {
         loading = true          // set before launching, so two quick calls can't both start
         scope.launch {
             try {
-                result = withContext(Dispatchers.IO) { repo.refresh() }
+                result = withContext(Dispatchers.IO) { repo.refresh(save = false) }
                 downloads++
                 checkedAt = settings.lastDownloadAt
             } catch (e: Exception) {

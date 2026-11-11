@@ -37,17 +37,20 @@ class QuietHoursTest {
         assertEquals("a (Found 03:32 16.10.2026.)", QuietHours.held(a, at("2026-10-16T03:32")).text)
     }
 
-    @Test fun earlyCheckSchedule() {
-        // Friday 16.10.2026 08:40 Helsinki: next run Friday 20:30 New York (03:30 Saturday Helsinki).
-        val r = EarlySchedule.next(at("2026-10-16T08:40"))
-        assertEquals("2026-10-16", r.expectedDate)
-        assertEquals(at("2026-10-17T03:30"), r.at.withZoneSameInstant(hki))
-        // After Friday's run: next is Monday.
-        assertEquals("2026-10-19", EarlySchedule.next(r.at).expectedDate)
-        // Retries hourly until 03:30 New York the next morning (10:30 Helsinki).
-        assertEquals(at("2026-10-17T04:30"), EarlySchedule.retry(r, r.at)!!.withZoneSameInstant(hki))
-        assertEquals(null, EarlySchedule.retry(r, at("2026-10-17T10:00")))
-        // US daylight saving ends 1.11.2026: Monday 2.11 run is 20:30 EST = 03:30 Helsinki (EET) too.
-        assertEquals(at("2026-11-03T03:30"), EarlySchedule.next(at("2026-11-02T12:00")).at.withZoneSameInstant(hki))
+    @Test fun earlyCheckWindow() {
+        // Friday 16.10.2026: the window for Friday's close is 03:30–10:30 Saturday Helsinki (EEST).
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-16T08:40")))
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-17T03:29")))
+        assertEquals("2026-10-16", EarlySchedule.expectedAt(at("2026-10-17T03:30")))
+        assertEquals("2026-10-16", EarlySchedule.expectedAt(at("2026-10-17T10:29")))
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-17T10:30")))
+        // No window on Saturday or Sunday night.
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-18T05:00")))
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-10-19T05:00")))
+        // US daylight saving ends 1.11.2026: Monday 2.11 still starts at 03:30 Helsinki (EET).
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-11-03T03:29")))
+        assertEquals("2026-11-02", EarlySchedule.expectedAt(at("2026-11-03T03:30")))
+        // Thursday 05.11.2026 (the −4.36% day): looked for from 03:30 on 06.11.
+        assertEquals("2026-11-05", EarlySchedule.expectedAt(at("2026-11-06T04:30")))
     }
 }

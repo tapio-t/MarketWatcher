@@ -137,6 +137,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("notify_sharp_fall", true)
         set(v) = prefs.edit().putBoolean("notify_sharp_fall", v).apply()
 
+    /** Notify when VIX/VIX3M reaches 1.00 (again after being at 0.90 or below). */
+    var notifyCurve: Boolean
+        get() = prefs.getBoolean("notify_curve", true)
+        set(v) = prefs.edit().putBoolean("notify_curve", v).apply()
+
     /** When FRED data was last downloaded successfully (epoch ms; 0 = never). */
     var lastDownloadAt: Long
         get() = prefs.getLong("last_download_at", 0L)
@@ -158,11 +163,27 @@ class Settings(context: Context) {
         get() = prefs.getString("cape_last_link", null)
         set(v) { prefs.edit().putString("cape_last_link", v).apply() }
 
-    /** When the twice-daily background check last ran (ISO instant) and what it did. */
+    /** When a background check last ran (ISO instant) and what it did. */
     val lastCheckAt: String? get() = prefs.getString("last_check_at", null)
     val lastCheckResult: String? get() = prefs.getString("last_check_result", null)
-    fun recordCheck(at: java.time.Instant, result: String) =
-        prefs.edit().putString("last_check_at", at.toString()).putString("last_check_result", Redact.text(result)).apply()
+
+    /** One entry of the background check log: when (ISO instant) and what happened. */
+    data class CheckEntry(val at: String, val text: String)
+
+    /** The last [CHECK_LOG_SIZE] background check results, newest first. */
+    fun checkLog(): List<CheckEntry> = runCatching {
+        val a = JSONArray(prefs.getString(CHECK_LOG, "[]"))
+        (0 until a.length()).map { a.getJSONObject(it).let { o -> CheckEntry(o.getString("at"), o.getString("text")) } }
+    }.getOrDefault(emptyList())
+
+    fun recordCheck(at: java.time.Instant, result: String): Unit = synchronized(LOG_LOCK) {
+        val text = Redact.text(result)
+        val log = (listOf(CheckEntry(at.toString(), text)) + checkLog()).take(CHECK_LOG_SIZE)
+        val a = JSONArray()
+        log.forEach { a.put(org.json.JSONObject().put("at", it.at).put("text", it.text)) }
+        prefs.edit().putString("last_check_at", at.toString()).putString("last_check_result", text)
+            .putString(CHECK_LOG, a.toString()).apply()
+    }
 
     companion object {
         const val FILE = "marketwatcher_settings"
@@ -170,6 +191,9 @@ class Settings(context: Context) {
         private const val MIGRATED_AT = "key_migrated_at"
         private const val KEY_UNREADABLE = "key_unreadable"
         private const val AV_UNREADABLE = "av_key_unreadable"
+        private const val CHECK_LOG = "check_log"
+        const val CHECK_LOG_SIZE = 30
+        private val LOG_LOCK = Any()
         private val LOCK = ApiKeyStore.LOCK   // shared with the store: migration can't overwrite a newly saved key
     }
 }
@@ -247,11 +271,22 @@ class SignalRepository(private val context: Context) {
         val previousSharpFallDate: String? = null,
         /** The newest S&P 500 close from FRED (not an estimate). */
         val fredPriceDate: String? = null,
+        /** The last volatility-curve inversion already seen ("" = none; null = not known yet). */
+        val previousInversionDate: String? = null,
     ) {
         val flags: Set<String> get() = today?.let { flagsOf(it) } ?: emptySet()
+        /** The latest volatility-curve inversion in the readings (live data only, like [today]). */
+        val inversion: fi.marketwatcher.work.NotificationRules.Inversion?
+            get() = if (today == null) null else fi.marketwatcher.work.NotificationRules.lastInversion(history)
         /** The newest S&P 500 close: a price-only day if there is one, else today's reading. */
         val price: PriceView? get() = if (today == null) null else prices.lastOrNull() ?: today.price()
     }
+
+    /**
+     * The newest FRED S&P 500 close a background check has already evaluated. Not the cache: the
+     * app's own refresh may have downloaded the close without notifying.
+     */
+    fun checkedPriceDate(): String? = memory.getString("checked_price_date", null)
 
     /** Cache + bundled history only: works offline and before an API key is set. */
     fun fromCache(): Result {
@@ -260,10 +295,11 @@ class SignalRepository(private val context: Context) {
     }
 
     /**
-     * Blocking network refresh: call off the main thread. [save] = false (notification tests)
-     * leaves the remembered state/flags untouched.
+     * Blocking network refresh: call off the main thread. [save] = true only for background checks:
+     * they remember what was seen, so the next check notifies only what is new. The app's own
+     * refresh uses false, so opening the app never uses up a notification (0.23).
      */
-    fun refresh(save: Boolean = true): Result {
+    fun refresh(save: Boolean): Result {
         settings.migrateKey()
         val fred = FredClient(settings.apiKey)
         val dailyStart = LocalDate.now().minusYears(11)   // FRED keeps ~10 years of SP500
@@ -349,6 +385,7 @@ class SignalRepository(private val context: Context) {
             prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList(),
             previousSharpFallDate = memory.getString("sharp_fall_date", null),
             fredPriceDate = data.getValue(Series.SP500).lastDate,
+            previousInversionDate = memory.getString("inversion_date", null),
         )
     }
 
@@ -360,6 +397,8 @@ class SignalRepository(private val context: Context) {
             p.sma200?.let { e.putBoolean("below_sma", p.close < it) }
             if (p.fall != null) e.putString("sharp_fall_date", p.date)
         }
+        e.putString("inversion_date", r.inversion?.date ?: "")
+        r.fredPriceDate?.let { e.putString("checked_price_date", it) }
         e.apply()
     }
 

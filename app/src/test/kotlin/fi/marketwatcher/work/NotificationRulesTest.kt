@@ -1,11 +1,15 @@
 package fi.marketwatcher.work
 
+import fi.marketwatcher.TestData
 import fi.marketwatcher.engine.Context
 import fi.marketwatcher.engine.State
+import fi.marketwatcher.work.NotificationRules.Inversion
 import fi.marketwatcher.work.NotificationRules.Kind
 import fi.marketwatcher.work.NotificationRules.Now
 import fi.marketwatcher.work.NotificationRules.Previous
 import org.junit.Assert.assertEquals
+import org.json.JSONObject
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -137,5 +141,60 @@ class NotificationRulesTest {
         val afterEstimate = Previous(State.CALM, emptySet(), true, sharpFallDate = "2026-10-14")
         assertTrue(sharp(afterEstimate, day(97.9, 100.0)).isEmpty())
         assertTrue(NotificationRules.evaluate(afterEstimate, day(90.0, 100.0), notifyState = false, notifyBelowSma = true).isEmpty())
+    }
+
+    // ---- volatility curve inverted (0.23)
+
+    private fun pt(date: String, ratio: Double) = Inversion(date, ratio, null, null)
+
+    @Test fun inversionNeedsRearmAtOrBelowPointNine() {
+        val days = listOf(pt("d1", 0.85), pt("d2", 1.10), pt("d3", 0.95), pt("d4", 1.04), pt("d5", 0.90), pt("d6", 0.995))
+        // d4 is not new (never back to 0.90 after d2); d6 shows as 1.00 after d5 re-armed.
+        assertEquals(listOf("d2", "d6"), NotificationRules.inversionsOf(days).map { it.date })
+        assertEquals("0.995 is shown as 1.00", "d6", NotificationRules.lastInversionOf(days)?.date)
+        assertEquals("0.9949 is shown as 0.99", emptyList<Inversion>(), NotificationRules.inversionsOf(listOf(pt("d1", 0.9949))))
+        assertEquals("NaN (no VIX3M) is skipped", emptyList<Inversion>(), NotificationRules.inversionsOf(listOf(pt("d1", Double.NaN))))
+    }
+
+    private fun curve(prev: Previous, inv: Inversion?, on: Boolean = true) =
+        NotificationRules.evaluate(prev, now().copy(inversion = inv), notifyState = false, notifyBelowSma = false, notifyCurve = on)
+
+    @Test fun inversionNotifiesOnceAndNotOnTheFirstCheck() {
+        // 05.11.2026: VIX 28.18, VIX3M 25.55.
+        val inv = Inversion("2026-11-05", 28.18 / 25.55, 28.18, 25.55)
+        val n = curve(Previous(State.CALM, emptySet(), false, inversionDate = "2026-04-07"), inv).single()
+        assertEquals(NotificationRules.ID_CURVE, n.id)
+        assertEquals("Volatility curve inverted: VIX/VIX3M 1.10 on 05.11.2026", n.title)
+        assertTrue(n.text, n.text.startsWith("VIX 28.18 is above VIX3M 25.55"))
+        assertEquals(NotificationRules.CHANNEL_CURVE, NotificationRules.channelOf(n.id))
+        assertTrue("none seen before", curve(Previous(State.CALM, emptySet(), false, inversionDate = ""), inv).size == 1)
+        assertTrue("already seen", curve(Previous(State.CALM, emptySet(), false, inversionDate = "2026-11-05"), inv).isEmpty())
+        assertTrue("first check after installing", curve(Previous(State.CALM, emptySet(), false, inversionDate = null), inv).isEmpty())
+        assertTrue("switch off", curve(Previous(State.CALM, emptySet(), false, inversionDate = ""), inv, on = false).isEmpty())
+        assertTrue("no inversion", curve(Previous(State.CALM, emptySet(), false, inversionDate = ""), null).isEmpty())
+    }
+
+    @Test fun inversionTestIsSimulatedWhenNeeded() {
+        val t = NotificationRules.test(Kind.CURVE, now()).single()
+        assertEquals(NotificationRules.ID_CURVE + NotificationRules.TEST_ID_OFFSET, t.id)
+        assertTrue(t.title, t.title.startsWith("Test: Volatility curve inverted: VIX/VIX3M 1.05"))
+        assertTrue(t.text, t.text.startsWith("Simulated inversion"))
+    }
+
+    @Test fun noBuyOrSellWordsInTheInversionNotice() {
+        val n = curve(Previous(State.CALM, emptySet(), false, inversionDate = ""), Inversion("2026-11-05", 1.10, 28.18, 25.55)).single()
+        val words = (n.title + " " + n.text).lowercase().split(Regex("[^a-z]+"))
+        assertFalse(n.text, words.any { it in setOf("buy", "sell", "buying", "selling") })
+    }
+
+    /** 2008–2026 (the golden inputs): 57 notices, about 3 a year, as in the 0.23 proposal. */
+    @Test fun inversionsInHistory() {
+        val d = JSONObject(TestData.golden()).getJSONArray("days")
+        val days = (0 until d.length()).map { d.getJSONArray(it) }.filter { !it.isNull(3) && it.getString(0) >= "2008-01-01" }
+            .map { Inversion(it.getString(0), it.getDouble(2) / it.getDouble(3), it.getDouble(2), it.getDouble(3)) }
+        val inv = NotificationRules.inversionsOf(days)
+        assertEquals(57, inv.size)
+        assertEquals("2008-01-04", inv.first().date)
+        assertEquals("2026-03-03", inv.last().date)
     }
 }

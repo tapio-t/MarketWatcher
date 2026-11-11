@@ -37,32 +37,27 @@ object QuietHours {
 }
 
 /**
- * When the early check runs: 20:30 New York time on US weekdays, about 4.5 hours after the close
- * and half an hour after FRED usually adds the S&P 500 close (03:30 Helsinki time). If the close is
- * not there yet, it tries again every hour until 03:30 New York time (10:30 Helsinki).
- * Computed in New York time, so both daylight-saving changes are handled.
+ * When the early check works: from 20:30 New York time on a US weekday (about 4.5 hours after the
+ * close and half an hour after FRED usually adds the S&P 500 close; 03:30 Helsinki) until 03:30 New
+ * York time the next morning (10:30 Helsinki). The hourly job does nothing outside this window or
+ * once a background check has seen that day's close. Computed in New York time, so both
+ * daylight-saving changes are handled.
  */
 object EarlySchedule {
     val NEW_YORK: java.time.ZoneId = java.time.ZoneId.of("America/New_York")
-    val RUN_AT: LocalTime = LocalTime.of(20, 30)
+    val START_AT: LocalTime = LocalTime.of(20, 30)
     val GIVE_UP_AT: LocalTime = LocalTime.of(3, 30)   // the next morning, New York time
-    const val RETRY_MINUTES = 60L
+    const val INTERVAL_MINUTES = 60L
 
-    data class Run(val at: ZonedDateTime, val expectedDate: String, val deadline: ZonedDateTime)
-
-    /** The next regular run strictly after [now] (any zone), with the trading day it expects. */
-    fun next(now: ZonedDateTime): Run {
+    /** The trading day whose close the early check looks for at [now] (any zone), or null outside the window. */
+    fun expectedAt(now: ZonedDateTime): String? {
         val ny = now.withZoneSameInstant(NEW_YORK)
-        var d = ny.toLocalDate()
-        while (true) {
-            val at = d.atTime(RUN_AT).atZone(NEW_YORK)
-            val weekday = d.dayOfWeek.value <= 5
-            if (weekday && at.isAfter(ny)) return Run(at, d.toString(), d.plusDays(1).atTime(GIVE_UP_AT).atZone(NEW_YORK))
-            d = d.plusDays(1)
+        for (d in listOf(ny.toLocalDate(), ny.toLocalDate().minusDays(1))) {
+            if (d.dayOfWeek.value > 5) continue
+            val start = d.atTime(START_AT).atZone(NEW_YORK)
+            val end = d.plusDays(1).atTime(GIVE_UP_AT).atZone(NEW_YORK)
+            if (!ny.isBefore(start) && ny.isBefore(end)) return d.toString()
         }
+        return null
     }
-
-    /** The retry after a run at [now] that did not find [run]'s day yet, or null after the deadline. */
-    fun retry(run: Run, now: ZonedDateTime): ZonedDateTime? =
-        now.plusMinutes(RETRY_MINUTES).takeIf { !it.isAfter(run.deadline) }
 }
