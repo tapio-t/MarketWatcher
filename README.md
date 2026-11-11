@@ -12,6 +12,15 @@ Not investment advice.
     30 minutes ago; pull down to download now.
   - States: Panic, This wave fading, New wave, Bear grind, Pullback, Uptrend restored, and
     **No panic** (not in a dip; called "Calm" before 0.12, internal name `CALM`).
+  - **Sharp-fall Panic** (since 0.24): a day change of −3.00% or worse (as shown) shows Panic until
+    the first later day at −0.25% or better. Only over No panic, Pullback and Bear grind; inside a
+    panic cycle the engine's own state stays, and it does not count as panic in a dip for the
+    fading and new-wave checks. Shown on 8 days in 2008–2026 (24.06.2016, 10.10.2018, 24.02.2020,
+    03.09.2020 and the days after). In both engines (`python/engine_v4.py`, `SignalEngine.kt`) and
+    the golden test. On closes newer than the last VIX day it is carried on by
+    `SignalEngine.withPrices`: from FRED's close at about 03:00, or from the VOO estimate on the
+    evening of the fall ("Suggested: Panic (estimate)"; the only place an estimate can change the
+    state; History never uses estimates).
   - "Suggested: <State>" box. Tap it to see why: the engine's rules in checking order, each
     marked ✓ (decided), ✗ (checked, not met) or · (not reached), with that day's numbers.
     The pop-up closes with the Close button at the bottom, back, or a tap outside it.
@@ -21,14 +30,17 @@ Not investment advice.
     03:00 Helsinki time, VIX/VIX3M about 16:40 the next day. Days with only the close
     (`engine/PriceDays.kt`, same rules as the engine) update the day change, S&P 500 and Trend
     tiles at once; the Suggested state and the other tiles stay on the last day with VIX. Then the
-    Suggested box says "for DD.MM.YYYY · waiting for VIX of newer days" and the data line shows
-    "S&P 500 to … · VIX to …".
+    Suggested box says "for DD.MM.YYYY · waiting for VIX of newer days" (or, when the sharp-fall
+    rule changed the state on a newer close, "sharp fall rule, S&P 500 close of …") and the data
+    line shows "S&P 500 to … · VIX to …".
   - **S&P 500 estimate from VOO** (since 0.21, optional Alpha Vantage key). When FRED has not
     published the latest close, FRED's last close is scaled by VOO's change since that day
     (`engine/VooEstimate.kt`). On VOO ex-dividend days the dividend is added back and the Day change
     tile says "Ex-dividend day". Estimated closes say "estimate from VOO" under the Close tile, and
     notifications from them end the title with "(estimate)". FRED's close replaces each one;
-    the Suggested state and History use FRED only.
+    the Suggested state uses FRED only, except the sharp-fall Panic (0.24), and History FRED only.
+    VOO's close is looked for from 16:30 New York time (23:30 Helsinki; 18:00 until 0.23), and the
+    hourly early check asks for it until 20:30 New York time.
   - Values, each with the date of its observation under it:
     S&P 500 (close, all-time high, from high), Trend (200-day average, distance, direction),
     Volatility (VIX, VIX3M, VIX/VIX3M), and Economy in two rows:

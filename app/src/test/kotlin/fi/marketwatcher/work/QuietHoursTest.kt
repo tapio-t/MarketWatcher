@@ -55,4 +55,15 @@ class QuietHoursTest {
         // Thursday 05.11.2026 (the −4.36% day): looked for from 03:30 on 06.11.
         assertEquals("2026-11-05", EarlySchedule.expectedAt(at("2026-11-06T04:30")))
     }
+
+    @Test fun earlyCheckVooHours() {
+        // 05.11.2026: VOO's close from 23:30 Helsinki (16:30 New York), FRED's from 03:30.
+        assertEquals(null, EarlySchedule.windowAt(at("2026-11-05T23:29")))
+        assertEquals(EarlySchedule.Window("2026-11-05", vooOnly = true), EarlySchedule.windowAt(at("2026-11-05T23:30")))
+        assertEquals(EarlySchedule.Window("2026-11-05", vooOnly = true), EarlySchedule.windowAt(at("2026-11-06T03:29")))
+        assertEquals(EarlySchedule.Window("2026-11-05", vooOnly = false), EarlySchedule.windowAt(at("2026-11-06T03:30")))
+        assertEquals(null, EarlySchedule.expectedAt(at("2026-11-06T01:00")))
+        // No VOO hours on Saturday evening.
+        assertEquals(null, EarlySchedule.windowAt(at("2026-11-07T23:45")))
+    }
 }

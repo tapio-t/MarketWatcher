@@ -98,10 +98,35 @@ object Explain {
         }
     }
 
+    /**
+     * The sharp-fall panic rule (0.24), checked after the rules of [steps]: DECIDED when it shows
+     * Panic over the engine's state.
+     */
+    fun sharpFall(r: Reading): Step {
+        val fall = if (r.fallDate != null && r.fallChange != null)
+            "S&P 500 ${SignalEngine.pct2(r.fallChange)} on ${dmy(r.fallDate)}" else null
+        val detail = when {
+            r.sharpFallPanic -> fall + (if (r.stateAsOf != null) "; from the S&P 500 close of ${dmy(r.stateAsOf)}" +
+                (if (r.stateEstimated) ", estimated from VOO" else "") + " (VIX not published yet)" else "") +
+                "; no day at −0.25% or better since"
+            r.fallPanicOn -> "On since ${fall ?: "a very sharp fall"}, but it applies only over No panic, Pullback " +
+                "and Bear grind; the rules above show ${r.baseState.title}"
+            fall != null -> "Off: a later day closed at −0.25% or better (last very sharp fall: $fall)"
+            else -> "Off"
+        }
+        return Step(Branch.SHARP_FALL, State.PANIC,
+            "Sharp-fall panic: a day of −3.00% or worse shows Panic until a later day closes at −0.25% or " +
+                "better. Applies over No panic, Pullback and Bear grind, after the rules above",
+            detail, if (r.sharpFallPanic) Outcome.DECIDED else Outcome.NOT_MET)
+    }
+
     fun notes(r: Reading): List<String> = buildList {
-        if (r.state != r.rawState) add(
+        if (r.baseState != r.rawState) add(
             "Today's checks point to ${r.rawState.title}. A new state is shown only after it holds " +
-                "for 2 days (Panic and New wave are shown at once), so ${r.state.title} is still shown.")
+                "for 2 days (Panic and New wave are shown at once), so ${r.baseState.title} is still " +
+                "the result of the rules above.")
+        if (r.sharpFallPanic) add("The sharp-fall rule shows Panic over ${r.baseState.title}. It does not " +
+            "count as panic seen in a dip, so it does not change the fading and new-wave checks.")
         add("Economy values (Sahm rule, NFCI, Buffett ratio) are shown for context and do not change the state.")
     }
 

@@ -69,8 +69,10 @@ class AlphaVantageTest {
 
     @Test fun expectedTradingDay() {
         fun ny(s: String) = ZonedDateTime.of(java.time.LocalDateTime.parse(s), ZoneId.of("America/New_York"))
-        assertEquals("2026-11-05", AvBudget.expectedDate(ny("2026-11-06T17:59")))   // Friday before 18:00
-        assertEquals("2026-11-06", AvBudget.expectedDate(ny("2026-11-06T18:00")))
+        assertEquals("2026-11-05", AvBudget.expectedDate(ny("2026-11-06T16:29")))   // Friday before 16:30
+        assertEquals("2026-11-06", AvBudget.expectedDate(ny("2026-11-06T16:30")))
+        // 05.11.2026: 23:30 Helsinki is 16:30 New York, so the evening estimate of the fall is looked for.
+        assertEquals("2026-11-05", AvBudget.expectedDate(ZonedDateTime.of(2026, 11, 5, 23, 30, 0, 0, ZoneId.of("Europe/Helsinki"))))
         assertEquals("2026-11-06", AvBudget.expectedDate(ny("2026-11-08T12:00")))   // Sunday
         assertEquals("2026-11-06", AvBudget.expectedDate(ny("2026-11-09T09:00")))   // Monday morning
         // Helsinki 03:30 on Saturday is Friday 20:30 in New York.

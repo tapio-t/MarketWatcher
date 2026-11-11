@@ -105,8 +105,24 @@ data class Reading(
     /** The previous trading day's close and date (null on the first day), for the day change. */
     val prevClose: Double? = null,
     val prevDate: String? = null,
+    /** The state before the sharp-fall panic rule (0.24); equals [state] when the rule is not shown. */
+    val baseState: State = state,
+    /** The sharp-fall panic rule is on after this day (shown only over [SignalEngine.FALL_PANIC_OVER]). */
+    val fallPanicOn: Boolean = false,
+    /** The last day of −3.00% or worse up to this day, and its change, for the explanation. */
+    val fallDate: String? = null,
+    val fallChange: Double? = null,
+    /**
+     * Set when the sharp-fall rule changed [state] on an S&P 500 close newer than this reading (VIX
+     * not published yet; see [SignalEngine.withPrices]): that close's date.
+     */
+    val stateAsOf: String? = null,
+    /** The sharp-fall rule changed on an estimated close (VOO): [state] is an estimate. */
+    val stateEstimated: Boolean = false,
 ) {
-    val label: String get() = state.label
+    val label: String get() = state.label + if (stateEstimated) " (estimate)" else ""
+    /** Panic is shown because of the sharp-fall rule, not the engine's own rules. */
+    val sharpFallPanic: Boolean get() = state != baseState
     /** Close at or below the 200-day average, as the "vs average" tile shows it (rounded to 0.1%). */
     val atOrBelowAverageShown: Boolean get() = distSma200?.let { Math.round(it * 1000) <= 0 } ?: false
     /** The 200-day average is lower than 20 trading days ago (the engine's "falling" test). */
@@ -118,7 +134,7 @@ data class Reading(
 }
 
 /** Which rule decided today's raw state, in the engine's checking order. */
-enum class Branch { CALM, NEW_WAVE, RESTORED, FADING, PANIC, FADE_HOLDS, PANIC_HOLDS, BEAR, PULLBACK }
+enum class Branch { CALM, NEW_WAVE, RESTORED, FADING, PANIC, FADE_HOLDS, PANIC_HOLDS, BEAR, PULLBACK, SHARP_FALL }
 
 /** The engine's working values for one day, recorded so the decision can be explained exactly. */
 data class Trace(
@@ -156,6 +172,8 @@ object Thresholds {
     const val RELAPSE_VIX_FRACTION = 0.90
     const val UPTREND_MIN_DD = -0.10
     const val UPTREND_DAYS = 10
+    const val FALL_PANIC_BP = -300      // sharp-fall panic (0.24): day change −3.00% or worse, as shown
+    const val FALL_PANIC_OFF_BP = -25   // ... until a later day at −0.25% or better
     const val ENTER_DAYS = 2
     const val LOOKBACK = 252
     const val SMA_LEN = 200
@@ -175,6 +193,44 @@ object Thresholds {
 
 object SignalEngine {
     private val IMMEDIATE = setOf(State.PANIC, State.NEW_WAVE)
+    /** The states the sharp-fall panic is shown over; inside a panic cycle the engine's own state stays. */
+    val FALL_PANIC_OVER = setOf(State.CALM, State.PULLBACK, State.BEAR_GRIND)
+
+    /** Day change in basis points (0.01%), as shown. */
+    fun dayChangeBp(close: Double, prev: Double): Long = Math.round((close / prev - 1) * 10_000)
+
+    /** The sharp-fall panic flag after a day with change [bp]. */
+    fun fallPanicStep(on: Boolean, bp: Long): Boolean = when {
+        bp <= Thresholds.FALL_PANIC_BP -> true
+        on && bp >= Thresholds.FALL_PANIC_OFF_BP -> false
+        else -> on
+    }
+
+    /**
+     * Carries the sharp-fall panic rule on from [r] (the newest full reading) through [prices], the
+     * S&P 500 closes after it (FRED's before VIX is published, or VOO estimates). Only the state can
+     * change: the rest of the reading stays [r]'s. [Reading.stateEstimated] is set when the newest
+     * change of the rule came from an estimate. Estimates never reach [run] or History.
+     */
+    fun withPrices(r: Reading, prices: List<PriceView>): Reading {
+        if (prices.isEmpty()) return r
+        var on = r.fallPanicOn
+        var fallDate = r.fallDate; var fallChange = r.fallChange
+        var changedBy: PriceView? = null   // the close that last turned the rule on, again on, or off
+        for (p in prices) {
+            val prev = p.prevClose ?: continue
+            val bp = dayChangeBp(p.close, prev)
+            if (bp <= Thresholds.FALL_PANIC_BP) { fallDate = p.date; fallChange = p.close / prev - 1 }
+            val next = fallPanicStep(on, bp)
+            if (next != on || bp <= Thresholds.FALL_PANIC_BP) changedBy = p
+            on = next
+        }
+        val state = if (on && r.baseState in FALL_PANIC_OVER) State.PANIC else r.baseState
+        val changed = state != r.state
+        return r.copy(state = state, fallPanicOn = on, fallDate = fallDate, fallChange = fallChange,
+            stateAsOf = if (changed) changedBy?.date else null,
+            stateEstimated = changed && changedBy?.estimated == true)
+    }
 
     /** One credit-stress window: its length, the change over it and the minimum rise it needs. */
     data class CreditWindow(val weeks: Int, val change: Double?, val minimum: Double) {
@@ -251,9 +307,17 @@ object SignalEngine {
         var state = State.CALM
         var pending: State? = null
         var pendingCount = 0
+        var fallOn = false
+        var fallDate: String? = null
+        var fallChange: Double? = null
 
         for (i in days.indices) {
             val d = days[i]
+            if (i > 0) {
+                val bp = dayChangeBp(d.spx, days[i - 1].spx)
+                if (bp <= t.FALL_PANIC_BP) { fallDate = d.date; fallChange = d.spx / days[i - 1].spx - 1 }
+                fallOn = fallPanicStep(fallOn, bp)
+            }
             if (d.spx > ath) { ath = d.spx; athDate = d.date }
             val s = sma(i)
             val sPrev = if (i >= t.SMA_SLOPE_DAYS) sma(i - t.SMA_SLOPE_DAYS) else null
@@ -404,10 +468,18 @@ object SignalEngine {
                 if (pendingCount >= t.ENTER_DAYS) { state = raw; pending = null; pendingCount = 0 }
             }
 
-            out += Reading(d.date, state, raw, d.spx, d.vix, d.vix3m, dd, ath, ratio, vpct,
+            var shown = state
+            if (fallOn && state in FALL_PANIC_OVER) {
+                shown = State.PANIC
+                reasons += "Very sharp fall: S&P 500 ${pct2(fallChange!!)} on ${Explain.dmy(fallDate)}; " +
+                    "Panic until a day closes at −0.25% or better"
+            }
+
+            out += Reading(d.date, shown, raw, d.spx, d.vix, d.vix3m, dd, ath, ratio, vpct,
                 s, rising, dist, active, epLow, if (active) epMaxDd else null, epPeakVix,
                 daysSinceLow, upRun, contextFor(d), reasons, d, athDate, trace, sma200Prev = sPrev,
-                prevClose = if (i > 0) days[i - 1].spx else null, prevDate = if (i > 0) days[i - 1].date else null)
+                prevClose = if (i > 0) days[i - 1].spx else null, prevDate = if (i > 0) days[i - 1].date else null,
+                baseState = state, fallPanicOn = fallOn, fallDate = fallDate, fallChange = fallChange)
         }
         return out
     }
@@ -418,5 +490,7 @@ object SignalEngine {
     private fun sgn2(x: Double) = String.format(java.util.Locale.US, "%+.2f", x)
     private fun pct1(x: Double) = String.format(java.util.Locale.US, "%.1f%%", x * 100)
     private fun pct0(x: Double) = String.format(java.util.Locale.US, "%.0f%%", x * 100)
+    /** "−4.36%" with a real minus sign. */
+    fun pct2(x: Double) = (if (x < 0) "−" else "+") + String.format(java.util.Locale.US, "%.2f%%", Math.abs(x) * 100)
     private fun grp(x: Double) = String.format(java.util.Locale.US, "%,.0f", x)
 }
