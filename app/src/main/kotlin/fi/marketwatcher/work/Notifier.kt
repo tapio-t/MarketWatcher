@@ -11,7 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.Person
+import fi.marketwatcher.R
 import androidx.core.content.ContextCompat
 import fi.marketwatcher.work.NotificationRules.CHANNEL_BELOW_RUN
 import fi.marketwatcher.work.NotificationRules.CHANNEL_BELOW_SMA
@@ -81,54 +81,46 @@ object Notifier {
         return null
     }
 
+    /** Amber of the "warning" tiles (dark theme): tints the notification icon and app name (0.27). */
+    const val AMBER = 0xFFF0A43A.toInt()
+
     /**
-     * Posts [n] on its channel at once. Returns false if it was blocked. Real and test notices go
-     * through [NotificationGate], which holds them outside 08:00–18:00.
+     * Posts [n] on its channel at once, with MarketWatcher's amber icon. Returns false if it was
+     * blocked. Real and test notices go through [NotificationGate], which holds them outside
+     * 08:00–18:00. [remind]: a real notice (not a test) starts its reminder vibrations ([Reminders]);
+     * a reminder posting it again passes false.
      */
     @SuppressLint("MissingPermission") // checked by blocked() just above
-    fun post(ctx: Context, n: NotificationRules.Notice): Boolean {
+    fun post(ctx: Context, n: NotificationRules.Notice, remind: Boolean = true): Boolean {
         val channel = NotificationRules.channelOf(n.id)
         if (blocked(ctx, channel) != null) return false
         return try {
             NotificationManagerCompat.from(ctx).notify(n.id,
                 NotificationCompat.Builder(ctx, channel)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setSmallIcon(R.drawable.ic_stat_marketwatcher)
+                    .setColor(AMBER)
                     .setContentTitle(n.title)
                     .setContentText(n.text)
-                    .setStyle(style(ctx, n))
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(n.text))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)   // banners on Android 7.1 and older style
                     .setVibrate(VIBRATION)                           // Android 7.1 and older; newer ones use the channel's
-                    .setCategory(if (messageStyle(ctx)) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
+                    .setCategory(NotificationCompat.CATEGORY_STATUS)
                     .setAutoCancel(true)
                     .setContentIntent(openApp(ctx))
                     // On a locked screen show only "MarketWatcher: market update" until the phone is unlocked.
                     .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                     .setPublicVersion(NotificationCompat.Builder(ctx, channel)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
-                        .setContentTitle("MarketWatcher")
+                        .setSmallIcon(R.drawable.ic_stat_marketwatcher)
+                        .setColor(AMBER)
+                        .setContentTitle("${NotificationRules.MARK}MarketWatcher")
                         .setContentText("Market update")
                         .build())
                     .build())
+            if (remind && n.id < NotificationRules.TEST_ID_OFFSET && Reminders.enabled(ctx)) Reminders.start(ctx, n)
             true
         } catch (e: SecurityException) {
             false   // permission revoked between the check and the post
         }
-    }
-
-    /** Settings > "Show notifications as messages" (0.25, off by default). */
-    private fun messageStyle(ctx: Context): Boolean = fi.marketwatcher.data.Settings(ctx).messageStyle
-
-    /**
-     * Message style (0.25): the notice as one message from "MarketWatcher", so phone features that
-     * alert again for unread messages (Samsung's Smart alert: vibrate when the phone is picked up)
-     * may include it. Otherwise the plain expandable text of earlier versions.
-     */
-    private fun style(ctx: Context, n: NotificationRules.Notice): NotificationCompat.Style {
-        if (!messageStyle(ctx)) return NotificationCompat.BigTextStyle().bigText(n.text)
-        val sender = Person.Builder().setName("MarketWatcher").setKey("marketwatcher").build()
-        return NotificationCompat.MessagingStyle(sender)
-            .setConversationTitle(n.title)
-            .addMessage(n.text, System.currentTimeMillis(), sender)
     }
 
     /** Tapping a notification opens MarketWatcher (or brings it to the front). */

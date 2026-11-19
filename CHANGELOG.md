@@ -2,6 +2,16 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.27 (19.11.2026)
+- Notifications stand out: MarketWatcher's own amber chart icon (was the generic "i") with amber
+  colour, and every title starts with 🟠 (tests: "Test: 🟠 …").
+- Reminder vibrations: a notification still unread (not opened or swiped away) is posted again
+  every 120 minutes, so the phone vibrates again; at most 3 times, only 08:00–18:00 (a reminder due
+  later is skipped). Settings switch (on), with a Test that reminds after about 1 minute.
+- Removed the "Show notifications as messages" switch: Samsung's Smart alert (vibrate when the phone
+  is picked up) ignored MarketWatcher's notifications as messages and as conversations (Galaxy S23+,
+  19.11.2026); it reacts to Samsung Messages only.
+
 ## 0.26 (19.11.2026)
 - Notifications are plain again by default: "Show notifications as messages" is off. Samsung's
   Smart alert (vibrate when the phone is picked up) did not react to MarketWatcher's message-style

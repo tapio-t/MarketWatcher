@@ -138,14 +138,10 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("notify_below_run", true)
         set(v) = prefs.edit().putBoolean("notify_below_run", v).apply()
 
-    /**
-     * Post notifications as messages (0.25), so the phone's "alert again for unread messages" features
-     * (Samsung Smart alert) may include them. Off by default: on Tapio's Galaxy S23+ Smart alert did not
-     * react to MarketWatcher's message-style notifications either (19.11.2026).
-     */
-    var messageStyle: Boolean
-        get() = prefs.getBoolean("message_style", false)
-        set(v) = prefs.edit().putBoolean("message_style", v).apply()
+    /** Vibrate again every 120 minutes (at most 3 times, 08:00–18:00) while a notification is unread (0.27). */
+    var remindUnread: Boolean
+        get() = prefs.getBoolean("remind_unread", true)
+        set(v) = prefs.edit().putBoolean("remind_unread", v).apply()
 
     /** Notify when the S&P 500 falls 2.00% or more from the previous close (once per trading day). */
     var notifySharpFall: Boolean

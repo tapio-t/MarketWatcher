@@ -91,7 +91,7 @@ class SharpFallPanicTest {
         val now = NotificationRules.now(est, emptySet(), day.price().copy(estimated = true))
         val n = NotificationRules.evaluate(NotificationRules.Previous(State.CALM, emptySet(), false), now,
             notifyState = true, notifyBelowSma = false).single()
-        assertEquals("Suggested: Panic (estimate)", n.title)
+        assertEquals("🟠 Suggested: Panic (estimate)", n.title)
         assertTrue(n.text, n.text.startsWith("Estimated from VOO; FRED has not published the close yet. " +
             "Very sharp fall: S&P 500 −3.59% on 24.06.2016."))
         val words = (n.title + " " + n.text).lowercase().split(Regex("[^a-z]+"))
