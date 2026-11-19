@@ -140,10 +140,11 @@ class Settings(context: Context) {
 
     /**
      * Post notifications as messages (0.25), so the phone's "alert again for unread messages" features
-     * (Samsung Smart alert) may include them. Off: plain notifications as up to 0.24.
+     * (Samsung Smart alert) may include them. Off by default: on Tapio's Galaxy S23+ Smart alert did not
+     * react to MarketWatcher's message-style notifications either (19.11.2026).
      */
     var messageStyle: Boolean
-        get() = prefs.getBoolean("message_style", true)
+        get() = prefs.getBoolean("message_style", false)
         set(v) = prefs.edit().putBoolean("message_style", v).apply()
 
     /** Notify when the S&P 500 falls 2.00% or more from the previous close (once per trading day). */

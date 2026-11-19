@@ -6,6 +6,11 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,6 +20,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fi.marketwatcher.data.BundledHistory
+import fi.marketwatcher.engine.CloseStats
 import fi.marketwatcher.engine.SignalEngine
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -69,6 +75,26 @@ class HistoryTileTest {
         }
         rule.onNodeWithContentDescription("Next day").performScrollTo().performClick()
         rule.onNodeWithTag("whatHappened").assertDoesNotExist()
+    }
+
+    /** 0.25: the gap tiles open their explanation, and the wide tile lists the sharp-fall days of every year. */
+    @Test fun sharpFallTilesOpenTheirPopUps() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val days = BundledHistory.load(ctx)
+        val data = ChartData(SignalEngine.run(days), CloseStats.of(days, emptyList()))
+        rule.setContent { MaterialTheme { HistoryScreen(data) } }
+        tapChip("2008")
+        rule.onNodeWithTag("tile:Sharp fall days in 2008").performScrollTo()
+        rule.onNode(hasText("41") and hasAnyAncestor(hasTestTag("tile:Sharp fall days in 2008"))).assertExists()
+        rule.onNodeWithTag("tile:Plain gap").performScrollTo().performClick()
+        rule.onNodeWithText("7 days").assertExists()
+        rule.onNode(hasText("Close") and hasClickAction()).performClick()
+        rule.onNodeWithTag("tile:Burst gap").performScrollTo().performClick()
+        rule.onNodeWithText("4 months, 2 days").assertExists()
+        rule.onNode(hasText("Close") and hasClickAction()).performClick()
+        rule.onNodeWithTag("sharpYearsTile").performScrollTo().performClick()
+        rule.onNodeWithTag("sharpYear:2008").performScrollTo().assertTextEquals("2008: 41")
+        rule.onNodeWithTag("sharpYear:2017").performScrollTo().assertTextEquals("2017: 0")
     }
 
     /** Recovery time: the 2008 low's high (09.10.2007) was reached again on 28.03.2013. */

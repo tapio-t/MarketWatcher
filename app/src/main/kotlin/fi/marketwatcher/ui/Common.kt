@@ -135,8 +135,9 @@ class ChartData(val readings: List<Reading>, val stats: CloseStats? = null) {
 
 // ---------------------------------------------------------------- value tiles
 
-/** Tiles that open an explanation when tapped (Today screen). */
-internal enum class InfoKind { DAY_CHANGE, VS_AVERAGE, SMA_TREND, DAYS_BELOW, VIX, VIX_RATIO, SAHM, NFCI, BUFFETT, YIELD_CURVE, DGS2, CAPE }
+/** Tiles that open an explanation when tapped. PLAIN_GAP and BURST_GAP are History's sharp-fall tiles (their own pop-up). */
+internal enum class InfoKind { DAY_CHANGE, VS_AVERAGE, SMA_TREND, DAYS_BELOW, VIX, VIX_RATIO, SAHM, NFCI, BUFFETT, YIELD_CURVE, DGS2, CAPE,
+    PLAIN_GAP, BURST_GAP }
 
 internal data class Tile(
     val label: String, val value: String, val date: String,
@@ -160,7 +161,7 @@ internal fun dayChangeTile(p: PriceView): Tile {
         info = InfoKind.DAY_CHANGE,
         sub = listOfNotNull(
             listOfNotNull(p.fall?.title, if (p.exDividend) "Ex-dividend day" else null).joinToString(" · ").ifEmpty { null },
-            prev?.let { "Prev. very sharp\n${dmy(it)}\n${ymdShort(it, p.date)} ago" },
+            prev?.let { "Prev. very sharp fall\n${dmy(it)}\n${ymdShort(it, p.date)} ago" },
         ).joinToString("\n").ifEmpty { null })
 }
 
@@ -301,7 +302,8 @@ private fun ValueTile(v: Tile, onClick: (() -> Unit)?, modifier: Modifier) {
         .semantics { stateDescription = if (v.flagged) "Warning on" else "Warning off" }
         .padding(horizontal = 10.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(v.label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            // Two lines, so a longer label ("Days below avg") shows in full on a narrow tile.
+            Text(v.label, fontSize = 11.sp, lineHeight = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
             if (onClick != null) Text(" ⓘ", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
         }
@@ -309,7 +311,7 @@ private fun ValueTile(v: Tile, onClick: (() -> Unit)?, modifier: Modifier) {
             color = if (v.flagged) warn else MaterialTheme.colorScheme.onSurface)
         Text(v.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (v.sub != null) Text(v.sub, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 5,
+        if (v.sub != null) Text(v.sub, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 6,
             overflow = TextOverflow.Ellipsis, color = if (v.flagged) warn else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

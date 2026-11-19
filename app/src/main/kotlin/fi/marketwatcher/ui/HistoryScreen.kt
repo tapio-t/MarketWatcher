@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -13,10 +14,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -99,6 +103,9 @@ internal fun HistoryScreen(data: ChartData?) {
     var whyFor by remember { mutableStateOf<Reading?>(null) }
     // A value pop-up shows the day that was selected when its tile was tapped.
     var infoFor by remember { mutableStateOf<Pair<InfoKind, Reading>?>(null) }
+    // The sharp-fall pop-ups: a gap tile's explanation, and the days per year.
+    var gapInfo by rememberSaveable { mutableStateOf<InfoKind?>(null) }
+    var showYears by rememberSaveable { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
     val ctx = LocalContext.current
     val dataMissing = remember { BundledData.isMissing(ctx) }
@@ -141,8 +148,8 @@ internal fun HistoryScreen(data: ChartData?) {
             SelectedValues(data, sel) { kind, r -> infoFor = kind to r }
             RecoveryTile(data, sel)
             data.stats?.let { stats ->
-                FallStats(data, stats, sel)
-                GapNote(stats)
+                FallStats(data, stats, sel) { gapInfo = it }
+                SharpYearsTile(stats) { showYears = true }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("S&P 500 · YEAR TO SELECTED DAY", fontSize = 11.sp, letterSpacing = 0.6.sp,
@@ -156,6 +163,10 @@ internal fun HistoryScreen(data: ChartData?) {
     }
     whyFor?.let { r -> WhyDialog(r) { whyFor = null } }
     infoFor?.let { (kind, r) -> InfoDialog(kind, r) { infoFor = null } }
+    data.stats?.let { stats ->
+        gapInfo?.let { GapDialog(it, stats) { gapInfo = null } }
+        if (showYears) SharpYearsDialog(stats, data.readings[n - 1].date) { showYears = false }
+    }
 }
 
 // Each of these reads the selection, so only they recompose when it moves.
@@ -264,62 +275,94 @@ private fun RecoveryTile(data: ChartData, sel: MutableIntState) {
     }
 }
 
-/** "6" or "5.5": a median count, whole when it is whole. */
-private fun medianText(x: Double): String = if (x.isNaN()) "—" else if (x % 1.0 == 0.0) fmt("%.0f", x) else fmt("%.1f", x)
+/** A median gap as "4 mo 2 d" (tile) or "4 months, 2 days" (pop-up); "—" when there are too few falls. */
+private fun gapText(days: Double, short: Boolean): String = if (days.isNaN()) "—" else daysAsYmd(days, short)
 
 /**
- * Below Recovery time: the sharp-fall medians over the full years since 2007, and the selected year's
- * sharp-fall days and longest run below the 200-day average. Display only, from FRED closes (no estimates).
+ * Below Recovery time: the plain and burst gaps between very sharp falls (tap for what they mean) and
+ * the selected year's sharp-fall days. Display only, from FRED closes since 2007 (no estimates).
  */
 @Composable
-private fun FallStats(data: ChartData, stats: CloseStats, sel: MutableIntState) {
+private fun FallStats(data: ChartData, stats: CloseStats, sel: MutableIntState, onInfo: (InfoKind) -> Unit) {
     val year = data.year[sel.intValue]
-    val years = stats.fullYears.let { if (it.isEmpty()) "—" else "${it.first}–${it.last}" }
-    val medians = remember(stats) {
-        TileGroup("Sharp falls since 2007 · median of full years", listOf(
-            Tile("Sharp days a year", medianText(stats.medianFallDaysPerYear(Fall.SHARP)), years, sub = "−2% or worse"),
-            Tile("Extreme days a year", medianText(stats.medianFallDaysPerYear(Fall.EXTREME)), years, sub = "−5% or worse"),
-            Tile("Plain gap", if (stats.medianGapDays.isNaN()) "—" else daysAsYmd(stats.medianGapDays, short = true), years,
-                sub = "between very sharp falls (−3%)"),
-            Tile("Burst gap", if (stats.medianBurstGapDays.isNaN()) "—" else daysAsYmd(stats.medianBurstGapDays, short = true),
-                years, sub = "between bursts of very sharp falls"),
-        ))
-    }
+    val span = stats.countedYears.let { if (it.isEmpty()) "—" else "${it.first}–${it.last}" }
     // The selected year: whole year, or to the latest close for the current one.
     val latest = data.readings[data.n - 1].date
     val upTo = if (latest.startsWith("$year")) "to ${dmy(latest)}" else "$year"
-    val run = remember(stats, year) { stats.longestRunIn(year) }
-    val selected = TileGroup("Selected year · $year", listOf(
-        Tile("Sharp fall days", stats.fallDays(year, Fall.SHARP).toString(), upTo,
+    val group = TileGroup("Sharp falls", listOf(
+        Tile("Plain gap", gapText(stats.medianGapDays, short = true), span, info = InfoKind.PLAIN_GAP,
+            sub = "median between very sharp falls"),
+        Tile("Burst gap", gapText(stats.medianBurstGapDays, short = true), span, info = InfoKind.BURST_GAP,
+            sub = "median between bursts"),
+        Tile("Sharp fall days in $year", stats.fallDays(year, Fall.SHARP).toString(), upTo,
             sub = "very sharp ${stats.fallDays(year, Fall.VERY_SHARP)} · extreme ${stats.fallDays(year, Fall.EXTREME)}"),
-        Tile("Longest run below avg", run?.let { "${it.days} days" } ?: "0 days", upTo,
-            flagged = (run?.days ?: 0) >= CloseStats.BELOW_RUN_ALERT,
-            sub = run?.let { "${dmy(it.start)}–${dmy(it.end)}" } ?: "no close below the average"),
     ))
-    // Two grids, so the medians and the selected year never share a row.
-    Column(Modifier.testTag("fallStats"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ValueGrid(listOf(medians), perRow = 6)
-        ValueGrid(listOf(selected), perRow = 6)
+    Column(Modifier.testTag("fallStats")) { ValueGrid(listOf(group), perRow = 6, onInfo = onInfo) }
+}
+
+/** Full-width tile, outlined like Recovery time; tapping it opens the sharp-fall days of every year. */
+@Composable
+private fun SharpYearsTile(stats: CloseStats, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    val years = stats.countedYears
+    Column(
+        Modifier.fillMaxWidth().clip(shape).clickable(onClickLabel = "Show sharp fall days per year", onClick = onClick)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .testTag("sharpYearsTile"),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("SHARP FALL DAYS PER YEAR", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(" ⓘ", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+        }
+        Text("${stats.fallDaysPerYear().sumOf { it.second }} days of −2% or worse", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (years.isEmpty()) "—" else "${years.first}–${years.last} · tap for each year", fontSize = 12.sp,
+            fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-/** What the two gaps mean (static; scrubbing never recomposes it). */
+/** "Sharp fall days per year history": each year's days of −2.00% or worse (very sharp and extreme included). */
 @Composable
-private fun GapNote(stats: CloseStats) = NoteCard("Plain gap and burst gap", "gapNote") {
-    val plain = if (stats.medianGapDays.isNaN()) "—" else daysAsYmd(stats.medianGapDays)
-    val burst = if (stats.medianBurstGapDays.isNaN()) "—" else daysAsYmd(stats.medianBurstGapDays)
-    Text("Very sharp falls (−3.00% or worse) usually come several within a few days: in 2025 on 03.04, 04.04 " +
-        "and 10.04. There were ${stats.verySharpDates.size} of them since 2007, in ${stats.bursts} bursts.",
-        fontSize = 13.sp, lineHeight = 18.sp)
-    Text("Plain gap ($plain): the median time from one very sharp fall to the next, counting every pair, also " +
-        "those inside a burst (03.04 → 04.04 is 1 day). It mostly shows how tightly they cluster.",
-        fontSize = 13.sp, lineHeight = 18.sp)
-    Text("Burst gap ($burst): falls at most ${CloseStats.BURST_DAYS} days apart count as one burst, and this is the " +
-        "median time between bursts (05.08.2024 → 03.04.2025 is 241 days). It is closer to \"how long until the next one\".",
-        fontSize = 13.sp, lineHeight = 18.sp)
-    Text("Medians use the full calendar years ${stats.fullYears.first}–${stats.fullYears.last} and FRED closes only. " +
-        "Display only; they do not change the suggested state.", fontSize = 12.sp, lineHeight = 16.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SharpYearsDialog(stats: CloseStats, latest: String, onClose: () -> Unit) {
+    val rows = remember(stats) { stats.fallDaysPerYear() }
+    AppDialog("Sharp fall days per year history", MaterialTheme.colorScheme.onSurface,
+        "Days when the S&P 500 closed −2.00% or worse (as shown) from the previous close, very sharp (−3%) and " +
+            "extreme (−5%) falls included. FRED closes since ${dmy(stats.dates.firstOrNull())}.", onClose) {
+        rows.forEach { (year, days) ->
+            val partial = if (latest.startsWith("$year")) " (to ${dmy(latest)})" else ""
+            Text("$year: $days$partial", fontSize = 14.sp, fontFamily = FontFamily.Monospace,
+                modifier = Modifier.testTag("sharpYear:$year"))
+        }
+        Spacer(Modifier.size(6.dp))
+        Text("Display only; it does not change the suggested state.", fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** What the plain gap and the burst gap mean, opened from their tiles. */
+@Composable
+private fun GapDialog(kind: InfoKind, stats: CloseStats, onClose: () -> Unit) {
+    val falls = "${stats.verySharpDates.size} very sharp falls (−3.00% or worse as shown, extreme falls included) from " +
+        "${dmy(stats.verySharpDates.firstOrNull())} to ${dmy(stats.verySharpDates.lastOrNull())}, in ${stats.bursts} bursts."
+    val (title, value, text) = if (kind == InfoKind.PLAIN_GAP) Triple("Plain gap", gapText(stats.medianGapDays, short = false),
+        "The median time from one very sharp fall to the next, counting every pair of consecutive falls, also " +
+            "those inside a burst. Very sharp falls usually come several within a few days (in 2025 on 03.04, 04.04 " +
+            "and 10.04: 1 and 6 days apart), so this mostly shows how tightly they cluster.")
+    else Triple("Burst gap", gapText(stats.medianBurstGapDays, short = false),
+        "Very sharp falls at most ${CloseStats.BURST_DAYS} days apart count as one burst, and this is the median time " +
+            "between bursts: only the gaps longer than ${CloseStats.BURST_DAYS} days (e.g. 05.08.2024 → 03.04.2025, " +
+            "241 days). It is closer to how long it has usually been until the next one.")
+    AppDialog(title, MaterialTheme.colorScheme.onSurface, null, onClose) {
+        Text(value, fontSize = 22.sp, fontFamily = FontFamily.Monospace)
+        Text("median", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.size(6.dp))
+        Text(text, fontSize = 14.sp, lineHeight = 20.sp)
+        Spacer(Modifier.size(6.dp))
+        Text("$falls FRED closes only. Display only; it does not change the suggested state.", fontSize = 13.sp,
+            lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 // ---------------------------------------------------------------- big chart

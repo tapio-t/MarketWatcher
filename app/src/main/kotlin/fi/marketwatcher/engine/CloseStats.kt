@@ -16,12 +16,12 @@ data class CloseFacts(
 
 /**
  * Display-only statistics of the S&P 500 closes: runs of closes below the 200-day average and the
- * sharp-fall counts for History (0.25). Never used by the engine's states, not backtested.
+ * sharp-fall counts and gaps for History (0.25). Never used by the engine's states, not backtested.
  *
  * [dates] and [closes] are the engine's input days followed by the price-only days ([PriceDays.after]),
  * so the average is the same as the engine's. Counted from the first bundled close (03.01.2007): a run
  * or a gap that started before the History readings (2008) is counted in full. [estimated] days (VOO)
- * get their [CloseFacts] but are left out of the yearly counts and medians.
+ * get their [CloseFacts] but are left out of the yearly counts and the gaps.
  */
 class CloseStats(val dates: List<String>, closes: DoubleArray, estimated: BooleanArray = BooleanArray(dates.size)) {
     private val n = dates.size
@@ -30,17 +30,11 @@ class CloseStats(val dates: List<String>, closes: DoubleArray, estimated: Boolea
     private val prevVerySharp = IntArray(n) { -1 }
     private val bp = LongArray(n)                         // day change in basis points (0 on the first day)
 
-    /** A run of closes below the 200-day average: its first and last close and its length in closes. */
-    data class Run(val start: String, val end: String, val days: Int)
-
-    private val runs = ArrayList<Run>()
-
     init {
         val t = Thresholds
         val pref = DoubleArray(n + 1)
         for (k in 0 until n) pref[k + 1] = pref[k] + closes[k]
         var lastVerySharp = -1
-        var runStart = -1
         for (i in 0 until n) {
             prevVerySharp[i] = lastVerySharp
             if (i > 0) bp[i] = SignalEngine.dayChangeBp(closes[i], closes[i - 1])
@@ -49,13 +43,10 @@ class CloseStats(val dates: List<String>, closes: DoubleArray, estimated: Boolea
             val sma = (pref[i + 1] - pref[i + 1 - t.SMA_LEN]) / t.SMA_LEN
             if (closes[i] < sma) {
                 run[i] = if (i > 0 && run[i - 1] > 0) run[i - 1] + 1 else 1
-                if (run[i] == 1) runStart = i
             } else {
                 run[i] = 0
-                if (i > 0 && run[i - 1] > 0) runs += Run(dates[runStart], dates[i - 1], run[i - 1])
             }
         }
-        if (n > 0 && run[n - 1] > 0) runs += Run(dates[runStart], dates[n - 1], run[n - 1])
     }
 
     // Yearly counts and medians use FRED closes only.
@@ -79,17 +70,16 @@ class CloseStats(val dates: List<String>, closes: DoubleArray, estimated: Boolea
     /** Days of [fall] or worse (as shown) in [year]. */
     fun fallDays(year: Int, fall: Fall): Int = counted.count { year(it) == year && bp[it] <= fall.bp }
 
-    /** The longest run below the 200-day average that has a close in [year] (counted in full), or null. */
-    fun longestRunIn(year: Int): Run? = runs.filter { it.start.take(4).toInt() <= year && it.end.take(4).toInt() >= year }
-        .maxByOrNull { it.days }
+    /** The years with a counted day change: from the first year of closes to the newest FRED close. */
+    val countedYears: IntRange = if (counted.isEmpty()) IntRange.EMPTY else year(counted.first())..year(counted.last())
 
-    /** The calendar years with closes from January to December: the first year to the year before the newest close. */
-    val fullYears: IntRange = if (n == 0) IntRange.EMPTY else year(0) until year(n - 1)
+    /** Each year of [countedYears] with its days of −2.00% or worse (very sharp and extreme included). */
+    fun fallDaysPerYear(): List<Pair<Int, Int>> = countedYears.map { it to fallDays(it, Fall.SHARP) }
 
-    /** Median number of days of [fall] or worse a year over [fullYears]. */
-    fun medianFallDaysPerYear(fall: Fall): Double = median(fullYears.map { fallDays(it, fall).toDouble() })
-
-    /** The dates of very sharp falls (−3.00% or worse as shown), FRED closes only. */
+    /**
+     * The dates of every very sharp fall (−3.00% or worse as shown, extreme falls included) from the
+     * first close to the newest FRED close: the falls both gaps are measured between.
+     */
     val verySharpDates: List<String> = counted.filter { bp[it] <= Fall.VERY_SHARP.bp }.map { dates[it] }
 
     private val gaps: List<Long> = verySharpDates.zipWithNext { a, b -> ChronoUnit.DAYS.between(LocalDate.parse(a), LocalDate.parse(b)) }
