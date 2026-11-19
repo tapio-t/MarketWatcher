@@ -1,6 +1,7 @@
 package fi.marketwatcher.data
 
 import android.content.Context
+import fi.marketwatcher.engine.CloseStats
 import fi.marketwatcher.engine.Day
 import fi.marketwatcher.engine.PriceDays
 import fi.marketwatcher.engine.PriceView
@@ -131,6 +132,11 @@ class Settings(context: Context) {
     var notifyBelowSma: Boolean
         get() = prefs.getBoolean("notify_below_sma", true)
         set(v) = prefs.edit().putBoolean("notify_below_sma", v).apply()
+
+    /** Notify when the S&P 500 has closed below its 200-day average 10 days in a row (once per run). */
+    var notifyBelowRun: Boolean
+        get() = prefs.getBoolean("notify_below_run", true)
+        set(v) = prefs.edit().putBoolean("notify_below_run", v).apply()
 
     /** Notify when the S&P 500 falls 2.00% or more from the previous close (once per trading day). */
     var notifySharpFall: Boolean
@@ -273,6 +279,13 @@ class SignalRepository(private val context: Context) {
         val fredPriceDate: String? = null,
         /** The last volatility-curve inversion already seen ("" = none; null = not known yet). */
         val previousInversionDate: String? = null,
+        /**
+         * The first close of the last run below the 200-day average already notified ("" = none;
+         * null = not known yet, e.g. the first check after installing 0.25: nothing is notified then).
+         */
+        val previousBelowRunStart: String? = null,
+        /** Display-only statistics of all closes since 2007 (History's sharp-fall tiles). */
+        val stats: CloseStats? = null,
     ) {
         val flags: Set<String> get() = today?.let { flagsOf(it) } ?: emptySet()
         /** The latest volatility-curve inversion in the readings (live data only, like [today]). */
@@ -374,11 +387,14 @@ class SignalRepository(private val context: Context) {
         // Bundled days keep their backtested S&P/VIX/NFCI values; the slow series are added from FRED.
         val bundled = BundledHistory.load(context).map { lookups.fill(it, keepNfci = true) }
         val days = BundledHistory.merge(bundled, live)
-        val readings = SignalEngine.run(days)
         val liveLast = live.lastOrNull()?.date
         // Saved VOO closes estimate the S&P 500 after FRED's last close (also after the key is removed).
         val estimates = VooEstimate.after(v(Series.SP500), voo.closes(), voo.dividends())
-        val prices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList()
+        val rawPrices = if (liveLast != null) PriceDays.after(days, v(Series.SP500), estimates) else emptyList()
+        // Display-only facts (days below the average, previous very sharp fall) for every close.
+        val stats = CloseStats.of(days, rawPrices)
+        val readings = SignalEngine.run(days).map { it.copy(facts = stats.factsFor(it.date)) }
+        val prices = rawPrices.map { it.copy(facts = stats.factsFor(it.date)) }
         return Result(
             // The sharp-fall Panic rule continues on newer closes (FRED before VIX, or VOO estimates);
             // History keeps the engine's own readings.
@@ -392,6 +408,8 @@ class SignalRepository(private val context: Context) {
             previousSharpFallDate = memory.getString("sharp_fall_date", null),
             fredPriceDate = data.getValue(Series.SP500).lastDate,
             previousInversionDate = memory.getString("inversion_date", null),
+            previousBelowRunStart = memory.getString("below_run_start", null),
+            stats = stats,
         )
     }
 
@@ -402,6 +420,10 @@ class SignalRepository(private val context: Context) {
         r.price?.let { p ->
             p.sma200?.let { e.putBoolean("below_sma", p.close < it) }
             if (p.fall != null) e.putString("sharp_fall_date", p.date)
+            // A run that reached the notification length counts as seen; "" marks "known, none yet".
+            val run = p.facts?.belowRun ?: 0
+            if (run >= CloseStats.BELOW_RUN_ALERT) e.putString("below_run_start", p.facts?.belowRunStart)
+            else if (!memory.contains("below_run_start")) e.putString("below_run_start", "")
         }
         e.putString("inversion_date", r.inversion?.date ?: "")
         r.fredPriceDate?.let { e.putString("checked_price_date", it) }

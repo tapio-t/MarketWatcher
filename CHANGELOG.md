@@ -2,6 +2,29 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.25 (19.11.2026)
+- Every notification vibrates (fixed pattern), whatever the phone's default is. Android lets an app
+  set a notification type's vibration only when it creates it, so all types are created again with
+  new internal ids; a type turned off in Android settings stays off.
+- New Trend tile "Days below avg": closes in a row below the 200-day average (any amount below
+  counts, so a day can count while "vs average" shows 0.0%), with the run's first day. Amber from
+  10 days. On its own line below the Trend row.
+- New notification "S&P 500 below its 200-day average for 10 days", once per run, own switch in
+  Settings (on by default). 19 runs reached 10 days in 2007–2026, about one a year. Never on the
+  first check after installing.
+- Trend row order: 200-day avg · Average is · vs average.
+- Day change tile: the previous very sharp fall (−3.00% or worse) before the day shown, and the
+  years, months and days since it. Also in its ⓘ pop-up.
+- Today: the day change tiles (Close, Prev. close, Day change) also under the past-year chart, for
+  the selected day.
+- History, below Recovery time: medians over the full years 2007–2025 (sharp-fall days a year 6,
+  extreme-fall days a year 0, plain gap between very sharp falls 7 days, burst gap 4 months 2 days),
+  the selected year's sharp-fall days and its longest run below the 200-day average, and a card that
+  explains the plain gap and the burst gap. From FRED closes since 03.01.2007, never estimates.
+- Panic held from earlier in a dip without a panic reading today (e.g. 31.03–02.04.2026) now says
+  so on the Suggested box ("No panic reading today · fading checks 4 of 4 met · needs a 2nd day"),
+  and the "why" dialog lists the four fading checks. The engine and the golden data are unchanged.
+
 ## 0.24 (11.11.2026)
 - New engine rule, sharp-fall Panic: a day change of −3.00% or worse shows "Suggested: Panic" until
   the first later day at −0.25% or better. Only over No panic, Pullback and Bear grind (inside a

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import fi.marketwatcher.engine.CloseStats
 import fi.marketwatcher.engine.Explain
 import fi.marketwatcher.engine.PriceView
 import fi.marketwatcher.engine.Reading
@@ -113,7 +114,7 @@ private fun signed3(x: Double): String = (if (x < 0) "−" else "+") + fmt("%.3f
  * skip the charts while only the selected day changes.
  */
 @Immutable
-class ChartData(val readings: List<Reading>) {
+class ChartData(val readings: List<Reading>, val stats: CloseStats? = null) {
     val n: Int = readings.size
     val spx = FloatArray(n) { readings[it].spx.toFloat() }
     val sma = FloatArray(n) { readings[it].sma200?.toFloat() ?: Float.NaN }
@@ -135,7 +136,7 @@ class ChartData(val readings: List<Reading>) {
 // ---------------------------------------------------------------- value tiles
 
 /** Tiles that open an explanation when tapped (Today screen). */
-internal enum class InfoKind { DAY_CHANGE, VS_AVERAGE, SMA_TREND, VIX, VIX_RATIO, SAHM, NFCI, BUFFETT, YIELD_CURVE, DGS2, CAPE }
+internal enum class InfoKind { DAY_CHANGE, VS_AVERAGE, SMA_TREND, DAYS_BELOW, VIX, VIX_RATIO, SAHM, NFCI, BUFFETT, YIELD_CURVE, DGS2, CAPE }
 
 internal data class Tile(
     val label: String, val value: String, val date: String,
@@ -149,11 +150,26 @@ internal data class TileGroup(val title: String, val tiles: List<Tile>)
 internal fun signedPct2(x: Double): String =
     if (Math.round(x * 10_000) == 0L) "0.00%" else (if (x < 0) "−" else "+") + fmt("%.2f%%", abs(x) * 100)
 
-/** The Day change tile: amber at −2.00% or worse, with the fall tier (and "Ex-dividend day") under the value. */
-internal fun dayChangeTile(p: PriceView): Tile =
-    Tile("Day change", p.change?.let { signedPct2(it) } ?: "—", dmy(p.date), flagged = p.fall != null,
+/**
+ * The Day change tile: amber at −2.00% or worse, with the fall tier (and "Ex-dividend day") under the
+ * value, then the previous very sharp fall (−3.00% or worse) and the time since it.
+ */
+internal fun dayChangeTile(p: PriceView): Tile {
+    val prev = p.facts?.prevVerySharp
+    return Tile("Day change", p.change?.let { signedPct2(it) } ?: "—", dmy(p.date), flagged = p.fall != null,
         info = InfoKind.DAY_CHANGE,
-        sub = listOfNotNull(p.fall?.title, if (p.exDividend) "Ex-dividend day" else null).joinToString(" · ").ifEmpty { null })
+        sub = listOfNotNull(
+            listOfNotNull(p.fall?.title, if (p.exDividend) "Ex-dividend day" else null).joinToString(" · ").ifEmpty { null },
+            prev?.let { "Prev. very sharp\n${dmy(it)}\n${ymdShort(it, p.date)} ago" },
+        ).joinToString("\n").ifEmpty { null })
+}
+
+/** Days in a row below the 200-day average: amber from [CloseStats.BELOW_RUN_ALERT] days, with the run's first day. */
+internal fun daysBelowTile(p: PriceView): Tile {
+    val run = p.facts?.belowRun
+    return Tile("Days below avg", run?.toString() ?: "—", dmy(p.date), (run ?: 0) >= CloseStats.BELOW_RUN_ALERT,
+        InfoKind.DAYS_BELOW, sub = p.facts?.belowRunStart?.let { "since ${dmy(it)}" })
+}
 
 /** The Close tile; an estimated close says so under the value. */
 internal fun closeTile(p: PriceView): Tile =
@@ -182,11 +198,13 @@ internal fun priceGroups(p: PriceView, withDayChange: Boolean = false): List<Til
             Tile("From high", signedPct(p.drawdown), day),
             if (withDayChange) dayChangeTile(p) else null,
         )),
+        // Three tiles a row in portrait: "Days below avg" goes on its own line below the others.
         TileGroup("Trend", listOf(
             Tile("200-day avg", p.sma200?.let { fmt("%,.0f", it) } ?: "—", day),
-            Tile("vs average", p.distSma200?.let { signedPct(it) } ?: "—", day, p.atOrBelowAverageShown, InfoKind.VS_AVERAGE),
             Tile("Average is", when (p.sma200Rising) { true -> "Rising"; false -> "Falling"; null -> "—" }, day,
                 p.averageFalling, InfoKind.SMA_TREND),
+            Tile("vs average", p.distSma200?.let { signedPct(it) } ?: "—", day, p.atOrBelowAverageShown, InfoKind.VS_AVERAGE),
+            daysBelowTile(p),
         )),
     )
 }
@@ -291,7 +309,7 @@ private fun ValueTile(v: Tile, onClick: (() -> Unit)?, modifier: Modifier) {
             color = if (v.flagged) warn else MaterialTheme.colorScheme.onSurface)
         Text(v.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (v.sub != null) Text(v.sub, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 2,
+        if (v.sub != null) Text(v.sub, fontSize = 10.sp, lineHeight = 12.sp, maxLines = 5,
             overflow = TextOverflow.Ellipsis, color = if (v.flagged) warn else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -313,6 +331,8 @@ internal fun StateBox(r: Reading, large: Boolean, onClick: () -> Unit, modifier:
                 if (r.stateAsOf != null) Text("sharp fall rule, S&P 500 close of ${dmy(r.stateAsOf)}" +
                     (if (r.stateEstimated) " (VOO estimate)" else "") + " · waiting for VIX", color = col, fontSize = 12.sp)
                 else if (showDate) Text("for ${dmy(r.date)} · waiting for VIX of newer days", color = col, fontSize = 12.sp)
+                // Panic held from earlier in the dip, without a panic reading today: say so (details in the "why" dialog).
+                Explain.heldPanic(r)?.let { Text(it.short, color = col, fontSize = 12.sp, modifier = Modifier.testTag("heldPanic")) }
             }
             Box(Modifier.size(if (large) 30.dp else 26.dp).background(col.copy(alpha = 0.2f), CircleShape),
                 contentAlignment = Alignment.Center) {

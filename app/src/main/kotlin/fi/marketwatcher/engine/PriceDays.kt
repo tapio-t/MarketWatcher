@@ -23,6 +23,8 @@ data class PriceView(
     val estimated: Boolean = false,
     /** An estimated day that is a VOO ex-dividend day (the dividend is added back when its amount is known). */
     val exDividend: Boolean = false,
+    /** Display-only facts from [CloseStats] (days below the average, previous very sharp fall). */
+    val facts: CloseFacts? = null,
 ) {
     val drawdown: Double get() = close / ath - 1
     val distSma200: Double? get() = sma200?.let { close / it - 1 }
@@ -36,7 +38,7 @@ data class PriceView(
 
 /** The price part of a full reading. */
 fun Reading.price(): PriceView =
-    PriceView(date, spx, prevClose, prevDate, ath, athDate, sma200, sma200Prev, sma200Rising, complete = true)
+    PriceView(date, spx, prevClose, prevDate, ath, athDate, sma200, sma200Prev, sma200Rising, complete = true, facts = facts)
 
 /** Sharp daily falls, compared in basis points (0.01%), so −2.00% as shown is a Sharp fall and −1.99% is not. */
 enum class Fall(val title: String, val bp: Int) {

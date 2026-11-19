@@ -82,6 +82,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
     var notifySma by remember { mutableStateOf(settings.notifyBelowSma) }
     var notifySharp by remember { mutableStateOf(settings.notifySharpFall) }
     var notifyCurve by remember { mutableStateOf(settings.notifyCurve) }
+    var notifyRun by remember { mutableStateOf(settings.notifyBelowRun) }
     var showLog by remember { mutableStateOf(false) }
     var held by remember { mutableStateOf(NotificationGate.held(ctx)) }
     val results = remember { mutableStateMapOf<Kind, TestResult>() }
@@ -99,6 +100,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
     fun switchOn(kind: Kind) = when (kind) {
         Kind.STATE -> settings.notifications
         Kind.BELOW_SMA -> settings.notifyBelowSma
+        Kind.BELOW_RUN -> settings.notifyBelowRun
         Kind.SHARP_FALL -> settings.notifySharpFall
         Kind.CURVE -> settings.notifyCurve
     }
@@ -191,6 +193,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
         when (kind) {
             Kind.STATE -> { notify = on; settings.notifications = on }
             Kind.BELOW_SMA -> { notifySma = on; settings.notifyBelowSma = on }
+            Kind.BELOW_RUN -> { notifyRun = on; settings.notifyBelowRun = on }
             Kind.SHARP_FALL -> { notifySharp = on; settings.notifySharpFall = on }
             Kind.CURVE -> { notifyCurve = on; settings.notifyCurve = on }
         }
@@ -213,6 +216,10 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
             checked = notifySma, onChange = { setSwitch(Kind.BELOW_SMA, it) },
             result = results[Kind.BELOW_SMA], onTest = { test(Kind.BELOW_SMA) }, onOpenSettings = ::openNotificationSettings)
         NotificationSetting(
+            text = "Notify when S&P 500 has been below 200-day average ${NotificationRules.BELOW_RUN_ALERT} days in a row",
+            checked = notifyRun, onChange = { setSwitch(Kind.BELOW_RUN, it) },
+            result = results[Kind.BELOW_RUN], onTest = { test(Kind.BELOW_RUN) }, onOpenSettings = ::openNotificationSettings)
+        NotificationSetting(
             text = "Notify sharp daily falls (S&P 500 −2% or worse)",
             checked = notifySharp, onChange = { setSwitch(Kind.SHARP_FALL, it) },
             result = results[Kind.SHARP_FALL], onTest = { test(Kind.SHARP_FALL) }, onOpenSettings = ::openNotificationSettings)
@@ -224,7 +231,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
         if (held.isNotEmpty()) Text("Held until 08:00: " + held.joinToString("; ") { it.title },
             fontSize = 12.sp, color = palette().warn)
         Text("Test builds a notification by the same rules as real ones from the latest data in the app. Only the " +
-            "previous check is simulated (and, if needed, a close below the average, a sharp fall, an inverted " +
+            "previous check is simulated (and, if needed, a close below the average, a run of closes below it, a sharp fall, an inverted " +
             "volatility curve or an economy flag). Test notifications start with \"Test:\" and nothing is saved, so real notifications are not " +
             "affected.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val at = settings.lastCheckAt?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).format(CHECK_TIME) }.getOrNull() }

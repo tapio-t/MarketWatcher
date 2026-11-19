@@ -20,10 +20,11 @@ object CheckRunner {
         val price = r.price ?: today.price()
         val notices = NotificationRules.evaluate(
             NotificationRules.Previous(r.previousState, r.previousFlags, r.previousBelowSma, r.previousSharpFallDate,
-                r.previousInversionDate),
+                r.previousInversionDate, r.previousBelowRunStart),
             NotificationRules.now(today, r.flags, price, r.inversion),
             notifyState = settings.notifications, notifyBelowSma = settings.notifyBelowSma,
-            notifySharpFall = settings.notifySharpFall, notifyCurve = settings.notifyCurve)
+            notifySharpFall = settings.notifySharpFall, notifyCurve = settings.notifyCurve,
+            notifyBelowRun = settings.notifyBelowRun)
         val est = if (price.estimated) " (estimate from VOO)" else ""
         val data = if (price.date != today.date)
             "S&P 500 to ${Explain.dmy(price.date)}$est, VIX to ${Explain.dmy(today.date)}, ${today.label}"

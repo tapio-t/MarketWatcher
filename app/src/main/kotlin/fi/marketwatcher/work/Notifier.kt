@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import fi.marketwatcher.work.NotificationRules.CHANNEL_BELOW_RUN
 import fi.marketwatcher.work.NotificationRules.CHANNEL_BELOW_SMA
 import fi.marketwatcher.work.NotificationRules.CHANNEL_CURVE
 import fi.marketwatcher.work.NotificationRules.CHANNEL_SHARP_FALL
@@ -30,29 +31,38 @@ object Notifier {
     /** What happened to a posted notification, checked against Android's list of active ones. */
     enum class Delivery { SHOWN, SHOWN_DND, NOT_LISTED }
 
+    /** Every notification vibrates with this pattern (off, on, off, on in ms), whatever the phone's default is. */
+    val VIBRATION = longArrayOf(0, 300, 200, 300)
+
     /**
-     * Creates the channels at high importance (pop-up banners) and removes the old
-     * default-importance channel, whose importance an app cannot raise. Safe to call often.
+     * Creates the channels at high importance (pop-up banners) with vibration, and removes the old
+     * channels: the default-importance one (up to 0.8) and the ones without vibration (up to 0.24),
+     * whose settings an app cannot change. A replaced channel that was turned off in Android
+     * settings is created turned off. Safe to call often.
      */
     fun ensureChannels(ctx: Context) {
         val nm = NotificationManagerCompat.from(ctx)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_STATE, "State and economy",
-            NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "When the suggested state changes or an economy flag turns on"
-        })
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_BELOW_SMA, "Below 200-day average",
-            NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "When the S&P 500 closes below its 200-day average"
-        })
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_SHARP_FALL, "Sharp falls",
-            NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "When the S&P 500 falls 2% or more in a day"
-        })
-        nm.createNotificationChannel(NotificationChannel(CHANNEL_CURVE, "Volatility curve inverted",
-            NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "When VIX/VIX3M reaches 1.00 (again after falling to 0.90 or below)"
-        })
-        if (nm.getNotificationChannel(LEGACY_CHANNEL) != null) nm.deleteNotificationChannel(LEGACY_CHANNEL)
+        fun channel(id: String, name: String, text: String) {
+            if (nm.getNotificationChannel(id) != null) return
+            // Keep the user's choice from the channel this one replaces.
+            val old = NotificationRules.OLD_CHANNELS.entries.firstOrNull { it.value == id }?.key
+            val off = old?.let { nm.getNotificationChannel(it) }?.importance == NotificationManager.IMPORTANCE_NONE
+            nm.createNotificationChannel(NotificationChannel(id, name,
+                if (off) NotificationManager.IMPORTANCE_NONE else NotificationManager.IMPORTANCE_HIGH).apply {
+                description = text
+                enableVibration(true)
+                vibrationPattern = VIBRATION
+            })
+        }
+        channel(CHANNEL_STATE, "State and economy", "When the suggested state changes or an economy flag turns on")
+        channel(CHANNEL_BELOW_SMA, "Below 200-day average", "When the S&P 500 closes below its 200-day average")
+        channel(CHANNEL_BELOW_RUN, "Below average for ${NotificationRules.BELOW_RUN_ALERT} days",
+            "When the S&P 500 has closed below its 200-day average ${NotificationRules.BELOW_RUN_ALERT} days in a row")
+        channel(CHANNEL_SHARP_FALL, "Sharp falls", "When the S&P 500 falls 2% or more in a day")
+        channel(CHANNEL_CURVE, "Volatility curve inverted", "When VIX/VIX3M reaches 1.00 (again after falling to 0.90 or below)")
+        (NotificationRules.OLD_CHANNELS.keys + LEGACY_CHANNEL).forEach {
+            if (nm.getNotificationChannel(it) != null) nm.deleteNotificationChannel(it)
+        }
     }
 
     fun needsPermission(ctx: Context): Boolean =
@@ -86,6 +96,7 @@ object Notifier {
                     .setContentText(n.text)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(n.text))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)   // banners on Android 7.1 and older style
+                    .setVibrate(VIBRATION)                           // Android 7.1 and older; newer ones use the channel's
                     .setCategory(NotificationCompat.CATEGORY_STATUS)
                     .setAutoCancel(true)
                     .setContentIntent(openApp(ctx))

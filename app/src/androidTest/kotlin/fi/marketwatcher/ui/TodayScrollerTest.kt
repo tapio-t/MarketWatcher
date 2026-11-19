@@ -20,7 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Today: the scroller under the past-year chart moves the six tiles to the selected day. */
+/** Today: the scroller under the past-year chart moves the selected day's tiles. */
 @RunWith(AndroidJUnit4::class)
 class TodayScrollerTest {
     @get:Rule val rule = createComposeRule()
@@ -30,8 +30,8 @@ class TodayScrollerTest {
         val data = ChartData(SignalEngine.run(BundledHistory.load(ctx)))
         rule.setContent { MaterialTheme { TodayScreen(data.readings.last(), null, data, true, false, 0L) {} } }
 
-        // Close appears three times: the day change group, today's grid and the selected day's grid.
-        assertEquals(3, rule.onAllNodesWithTag("tile:Close").fetchSemanticsNodes().size)
+        // Close appears four times: today's day change group and grid, and the selected day's day change group and grid.
+        assertEquals(4, rule.onAllNodesWithTag("tile:Close").fetchSemanticsNodes().size)
         rule.onNodeWithTag("todaySelectedDate").performScrollTo().assertTextEquals("22.09.2026 · latest")
 
         rule.onNodeWithContentDescription("Previous day").performScrollTo().performClick()
