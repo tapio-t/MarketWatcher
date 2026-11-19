@@ -98,7 +98,10 @@ class NotifierDeviceTest {
         Thread.sleep(1500)                                   // the first vibration ends
         val before = phoneTime()
         Reminders.start(ctx, n, delayMs = 0, times = 1)
+        val listedAtReminder = active(n.id) != null
         val posted = Reminders.run(ctx)
+        // Tapio's launcher filter removes the test app's notifications about 0.2 s after posting (19.11.2026).
+        assumeTrue("Removed by another app's notification filter before the reminder", listedAtReminder || posted.isNotEmpty())
         assertEquals(listOf(n), posted)
         assertTrue("last reminder: nothing left", Reminders.pending(ctx).none { it.notice.id == n.id })
         var found = emptyList<String>()
