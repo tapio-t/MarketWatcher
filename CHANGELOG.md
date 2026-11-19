@@ -2,6 +2,18 @@
 
 Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 
+## 0.26 (19.11.2026)
+- Notifications are plain again by default: "Show notifications as messages" is off. Samsung's
+  Smart alert (vibrate when the phone is picked up) did not react to MarketWatcher's message-style
+  notifications on a Galaxy S23+; the switch stays for phones that may.
+- Tile labels can take two lines, so longer ones ("Days below avg", "Yield curve 10y–2y") show in
+  full. The Day change tile says "Prev. very sharp fall".
+- History: the median sharp-fall and extreme-fall days a year tiles and the selected year's longest
+  run below the average are removed. "Plain gap" and "Burst gap" open their explanation when tapped
+  (the card is gone); both use every −3.00%-or-worse day since 2007, extreme falls included (83).
+- History: new wide tile "Sharp fall days per year"; tapping it opens "Sharp fall days per year
+  history", each year's days of −2% or worse (219 since 2007).
+
 ## 0.25 (19.11.2026)
 - Every notification vibrates (fixed pattern), whatever the phone's default is. Android lets an app
   set a notification type's vibration only when it creates it, so all types are created again with
