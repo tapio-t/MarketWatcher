@@ -83,6 +83,7 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
     var notifySharp by remember { mutableStateOf(settings.notifySharpFall) }
     var notifyCurve by remember { mutableStateOf(settings.notifyCurve) }
     var notifyRun by remember { mutableStateOf(settings.notifyBelowRun) }
+    var messageStyle by remember { mutableStateOf(settings.messageStyle) }
     var showLog by remember { mutableStateOf(false) }
     var held by remember { mutableStateOf(NotificationGate.held(ctx)) }
     val results = remember { mutableStateMapOf<Kind, TestResult>() }
@@ -227,6 +228,14 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
             text = "Notify when the volatility curve inverts (VIX/VIX3M 1.00 or above; again after 0.90 or below)",
             checked = notifyCurve, onChange = { setSwitch(Kind.CURVE, it) },
             result = results[Kind.CURVE], onTest = { test(Kind.CURVE) }, onOpenSettings = ::openNotificationSettings)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = messageStyle, onCheckedChange = { messageStyle = it; settings.messageStyle = it })
+            Spacer(Modifier.width(12.dp))
+            Text("Show notifications as messages, so the phone can alert again for them like for unread " +
+                "messages (on Samsung: Smart alert vibrates when you pick up the phone, if the phone includes them)",
+                fontSize = 14.sp, modifier = Modifier.weight(1f))
+        }
+        Text("All notifications vibrate.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(QuietHours.TEXT, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         if (held.isNotEmpty()) Text("Held until 08:00: " + held.joinToString("; ") { it.title },
             fontSize = 12.sp, color = palette().warn)

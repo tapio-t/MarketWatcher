@@ -6,6 +6,11 @@ Versions are tagged `vX.Y` on `main`. Dates are DD.MM.YYYY.
 - Every notification vibrates (fixed pattern), whatever the phone's default is. Android lets an app
   set a notification type's vibration only when it creates it, so all types are created again with
   new internal ids; a type turned off in Android settings stays off.
+- Notifications are posted as messages ("MarketWatcher" as the sender, category message), so phone
+  features that alert again for unread messages may include them. Samsung's Smart alert (vibrate
+  when the phone is picked up) did not react to an adb test notification in message style (shell
+  app, 19.11.2026); whether it reacts to MarketWatcher's own is to be seen on the phone. New
+  Settings switch "Show notifications as messages" (on); off gives the plain notifications of 0.24.
 - New Trend tile "Days below avg": closes in a row below the 200-day average (any amount below
   counts, so a day can count while "vs average" shows 0.0%), with the run's first day. Amber from
   10 days. On its own line below the Trend row.

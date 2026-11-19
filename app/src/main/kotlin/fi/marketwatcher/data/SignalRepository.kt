@@ -138,6 +138,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("notify_below_run", true)
         set(v) = prefs.edit().putBoolean("notify_below_run", v).apply()
 
+    /**
+     * Post notifications as messages (0.25), so the phone's "alert again for unread messages" features
+     * (Samsung Smart alert) may include them. Off: plain notifications as up to 0.24.
+     */
+    var messageStyle: Boolean
+        get() = prefs.getBoolean("message_style", true)
+        set(v) = prefs.edit().putBoolean("message_style", v).apply()
+
     /** Notify when the S&P 500 falls 2.00% or more from the previous close (once per trading day). */
     var notifySharpFall: Boolean
         get() = prefs.getBoolean("notify_sharp_fall", true)

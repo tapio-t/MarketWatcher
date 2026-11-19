@@ -41,6 +41,26 @@ class NotifierDeviceTest {
             assertEquals(NotificationManager.IMPORTANCE_HIGH, ch.importance)
         }
         assertEquals(null, nm.getNotificationChannel(NotificationRules.LEGACY_CHANNEL))
+        // 0.25: every channel vibrates, and the channels without vibration (up to 0.24) are gone.
+        for (id in NotificationRules.OLD_CHANNELS.values + NotificationRules.CHANNEL_BELOW_RUN) {
+            val ch = nm.getNotificationChannel(id)
+            assertTrue(id, ch.shouldVibrate())
+            assertTrue(id, ch.vibrationPattern.contentEquals(Notifier.VIBRATION))
+        }
+        NotificationRules.OLD_CHANNELS.keys.forEach { assertEquals(it, null, nm.getNotificationChannel(it)) }
+    }
+
+    /** Message style (0.25, on by default): category "msg", so Samsung's Smart alert may include it. */
+    @Test fun noticeIsAMessage() {
+        val now = NotificationRules.Now("2026-09-22", State.CALM, emptySet(), emptyMap(), 100.0, 95.0)
+        val notice = NotificationRules.test(NotificationRules.Kind.BELOW_SMA, now).single()
+        assertTrue(Notifier.post(ctx, notice))
+        val nm = ctx.getSystemService(NotificationManager::class.java)!!
+        var n: android.app.Notification? = null
+        repeat(20) { if (n == null) { Thread.sleep(25); n = nm.activeNotifications.firstOrNull { it.id == notice.id }?.notification } }
+        nm.cancel(notice.id)
+        assumeFalse("Removed by another app's notification filter", n == null && Notifier.listenerApps(ctx).isNotEmpty())
+        assertEquals(android.app.Notification.CATEGORY_MESSAGE, n!!.category)
     }
 
     @Test fun testNoticeIsPostedAndListed() {
