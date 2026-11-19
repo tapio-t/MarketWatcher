@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.marketwatcher.engine.CloseStats
 import fi.marketwatcher.engine.PriceView
 import fi.marketwatcher.engine.Reading
 import fi.marketwatcher.engine.price
@@ -80,7 +81,12 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
                 (if (p.estimated) " This close is an estimate: FRED's last close scaled by VOO's change since that day " +
                     "(Alpha Vantage). FRED's close replaces it when published." else "") +
                 (if (p.exDividend) " Ex-dividend day: VOO's dividend is added back when its amount is known, because VOO's price drops by it and " +
-                    "the index does not." else "")
+                    "the index does not." else "") +
+                (p.facts?.prevVerySharp?.let { prev ->
+                    " Previous very sharp fall (−3.00% or worse) before this day: ${dmy(prev)}" +
+                        (p.facts?.prevVerySharpChange?.let { " (${signedPct2(it)})" } ?: "") +
+                        ", ${yearsMonthsDays(prev, p.date)} earlier."
+                } ?: "")
             Info("Day change", p.change?.let { signedPct2(it) } ?: "—", p.date, explanation, inApp,
                 p.fall != null, URL_SPX_CHART, flagName = p.fall?.title ?: "Sharp fall")
         }
@@ -94,6 +100,20 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
                 "is strictly below the average. Display only; it does not change the suggested state."
             Info("vs average", p.distSma200?.let { signedPct(it) } ?: "—", p.date, explanation, inApp,
                 p.atOrBelowAverageShown, URL_SPX_CHART, flagName = "At or below average")
+        }
+        InfoKind.DAYS_BELOW -> {
+            val f = p.facts
+            val explanation = listOf(AnnotatedString("How many closes in a row the S&P 500 has been below its 200-day " +
+                "average, counted up to this day. A short dip under the average is common; a long run below it is " +
+                "more often part of a lasting decline."))
+            val since = f?.belowRunStart?.let { " The run started on ${dmy(it)}." } ?: ""
+            val inApp = "In MarketWatcher: a close counts when it is below the average by any amount, so a day can count " +
+                "while \"vs average\" shows 0.0%.$since Amber, and the \"below 200-day average for " +
+                "${CloseStats.BELOW_RUN_ALERT} days\" notification, at ${CloseStats.BELOW_RUN_ALERT} closes in a row: " +
+                "about once a year in 2007–2026 (19 runs). Display only; it does not change the suggested state."
+            Info("Days below avg", f?.belowRun?.toString() ?: "—", p.date, explanation, inApp,
+                (f?.belowRun ?: 0) >= CloseStats.BELOW_RUN_ALERT, URL_SPX_CHART,
+                flagName = "${CloseStats.BELOW_RUN_ALERT} days or more")
         }
         InfoKind.SMA_TREND -> {
             val prev = p.sma200Prev

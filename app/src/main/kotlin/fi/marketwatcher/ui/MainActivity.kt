@@ -106,7 +106,7 @@ private fun App(repo: SignalRepository, settings: Settings) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Chart arrays are built once per data load, not per frame.
-    val chart = remember(result?.history) { result?.history?.takeIf { it.size > 1 }?.let { ChartData(it) } }
+    val chart = remember(result?.history) { result?.history?.takeIf { it.size > 1 }?.let { ChartData(it, result?.stats) } }
 
     var checkedAt by remember { mutableLongStateOf(settings.lastDownloadAt) }
     // Counts finished downloads, so a slower cache re-read never replaces a newer download.

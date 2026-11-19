@@ -65,6 +65,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.marketwatcher.engine.CloseStats
+import fi.marketwatcher.engine.Fall
 import fi.marketwatcher.engine.Reading
 import fi.marketwatcher.engine.State
 import kotlin.math.ln
@@ -138,6 +140,10 @@ internal fun HistoryScreen(data: ChartData?) {
             SelectedState(data, sel) { whyFor = it }
             SelectedValues(data, sel) { kind, r -> infoFor = kind to r }
             RecoveryTile(data, sel)
+            data.stats?.let { stats ->
+                FallStats(data, stats, sel)
+                GapNote(stats)
+            }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("S&P 500 · YEAR TO SELECTED DAY", fontSize = 11.sp, letterSpacing = 0.6.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -256,6 +262,64 @@ private fun RecoveryTile(data: ChartData, sel: MutableIntState) {
             fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(line2, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** "6" or "5.5": a median count, whole when it is whole. */
+private fun medianText(x: Double): String = if (x.isNaN()) "—" else if (x % 1.0 == 0.0) fmt("%.0f", x) else fmt("%.1f", x)
+
+/**
+ * Below Recovery time: the sharp-fall medians over the full years since 2007, and the selected year's
+ * sharp-fall days and longest run below the 200-day average. Display only, from FRED closes (no estimates).
+ */
+@Composable
+private fun FallStats(data: ChartData, stats: CloseStats, sel: MutableIntState) {
+    val year = data.year[sel.intValue]
+    val years = stats.fullYears.let { if (it.isEmpty()) "—" else "${it.first}–${it.last}" }
+    val medians = remember(stats) {
+        TileGroup("Sharp falls since 2007 · median of full years", listOf(
+            Tile("Sharp days a year", medianText(stats.medianFallDaysPerYear(Fall.SHARP)), years, sub = "−2% or worse"),
+            Tile("Extreme days a year", medianText(stats.medianFallDaysPerYear(Fall.EXTREME)), years, sub = "−5% or worse"),
+            Tile("Plain gap", if (stats.medianGapDays.isNaN()) "—" else daysAsYmd(stats.medianGapDays, short = true), years,
+                sub = "between very sharp falls (−3%)"),
+            Tile("Burst gap", if (stats.medianBurstGapDays.isNaN()) "—" else daysAsYmd(stats.medianBurstGapDays, short = true),
+                years, sub = "between bursts of very sharp falls"),
+        ))
+    }
+    // The selected year: whole year, or to the latest close for the current one.
+    val latest = data.readings[data.n - 1].date
+    val upTo = if (latest.startsWith("$year")) "to ${dmy(latest)}" else "$year"
+    val run = remember(stats, year) { stats.longestRunIn(year) }
+    val selected = TileGroup("Selected year · $year", listOf(
+        Tile("Sharp fall days", stats.fallDays(year, Fall.SHARP).toString(), upTo,
+            sub = "very sharp ${stats.fallDays(year, Fall.VERY_SHARP)} · extreme ${stats.fallDays(year, Fall.EXTREME)}"),
+        Tile("Longest run below avg", run?.let { "${it.days} days" } ?: "0 days", upTo,
+            flagged = (run?.days ?: 0) >= CloseStats.BELOW_RUN_ALERT,
+            sub = run?.let { "${dmy(it.start)}–${dmy(it.end)}" } ?: "no close below the average"),
+    ))
+    // Two grids, so the medians and the selected year never share a row.
+    Column(Modifier.testTag("fallStats"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ValueGrid(listOf(medians), perRow = 6)
+        ValueGrid(listOf(selected), perRow = 6)
+    }
+}
+
+/** What the two gaps mean (static; scrubbing never recomposes it). */
+@Composable
+private fun GapNote(stats: CloseStats) = NoteCard("Plain gap and burst gap", "gapNote") {
+    val plain = if (stats.medianGapDays.isNaN()) "—" else daysAsYmd(stats.medianGapDays)
+    val burst = if (stats.medianBurstGapDays.isNaN()) "—" else daysAsYmd(stats.medianBurstGapDays)
+    Text("Very sharp falls (−3.00% or worse) usually come several within a few days: in 2025 on 03.04, 04.04 " +
+        "and 10.04. There were ${stats.verySharpDates.size} of them since 2007, in ${stats.bursts} bursts.",
+        fontSize = 13.sp, lineHeight = 18.sp)
+    Text("Plain gap ($plain): the median time from one very sharp fall to the next, counting every pair, also " +
+        "those inside a burst (03.04 → 04.04 is 1 day). It mostly shows how tightly they cluster.",
+        fontSize = 13.sp, lineHeight = 18.sp)
+    Text("Burst gap ($burst): falls at most ${CloseStats.BURST_DAYS} days apart count as one burst, and this is the " +
+        "median time between bursts (05.08.2024 → 03.04.2025 is 241 days). It is closer to \"how long until the next one\".",
+        fontSize = 13.sp, lineHeight = 18.sp)
+    Text("Medians use the full calendar years ${stats.fullYears.first}–${stats.fullYears.last} and FRED closes only. " +
+        "Display only; they do not change the suggested state.", fontSize = 12.sp, lineHeight = 16.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 // ---------------------------------------------------------------- big chart

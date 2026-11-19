@@ -120,7 +120,46 @@ object Explain {
             detail, if (r.sharpFallPanic) Outcome.DECIDED else Outcome.NOT_MET)
     }
 
+    /** Why Panic (or New wave) is still shown on a day without a panic reading: the fading checks (0.25). */
+    data class HeldPanic(
+        /** Each fading condition with today's value, and whether it is met. */
+        val checks: List<Pair<String, Boolean>>,
+    ) {
+        val met: Int get() = checks.count { it.second }
+        val allMet: Boolean get() = met == checks.size
+        /** One line for the Suggested box. */
+        val short: String get() = "No panic reading today · fading checks $met of ${checks.size} met" +
+            if (allMet) " · needs a 2nd day" else ""
+        /** The full explanation for the "why" dialog. */
+        val lines: List<String> get() = listOf("No panic reading today (curve not inverted, VIX not at a panic level). " +
+            "Panic stays until this wave's fading is confirmed:") +
+            checks.map { (text, ok) -> (if (ok) "✓ " else "✗ ") + text } +
+            (if (allMet) "All met today: This wave fading is shown when they are met again on the next trading day."
+             else "Fading needs all ${checks.size}, on 2 trading days in a row.")
+    }
+
+    /**
+     * Set when [r] shows the engine's own Panic or New wave although no panic rule is met today: panic
+     * was seen earlier in this dip and fading is not confirmed yet (e.g. 31.03–02.04.2026).
+     */
+    fun heldPanic(r: Reading): HeldPanic? {
+        val t = r.trace
+        if (r.sharpFallPanic || r.state !in setOf(State.PANIC, State.NEW_WAVE) || !r.episodeActive || t.panicNow) return null
+        val peak = r.episodeVixPeak ?: return null
+        val low = r.episodeLow ?: return null
+        val th = Thresholds
+        val vixMax = th.FADE_VIX_FRACTION * peak
+        val off = r.spx / low - 1
+        return HeldPanic(listOf(
+            "VIX ${f1(r.vix)} at or below ${f1(vixMax)} (80% of its dip peak ${f1(peak)})" to (r.vix <= vixMax),
+            "VIX/VIX3M ${f2(r.vixRatio)} below ${f2(th.FADE_RATIO)} (or 0.15 below its dip peak)" to t.curveOk,
+            "${r.daysSinceLow ?: 0} days without a new low (needs ${th.LOW_HELD_DAYS})" to ((r.daysSinceLow ?: 0) >= th.LOW_HELD_DAYS),
+            "${sgn(off)} off the low ${grp(low)} (needs +${f1(th.BOUNCE_OFF_LOW * 100)}%)" to (r.spx >= low * (1 + th.BOUNCE_OFF_LOW)),
+        ))
+    }
+
     fun notes(r: Reading): List<String> = buildList {
+        heldPanic(r)?.let { addAll(it.lines) }
         if (r.baseState != r.rawState) add(
             "Today's checks point to ${r.rawState.title}. A new state is shown only after it holds " +
                 "for 2 days (Panic and New wave are shown at once), so ${r.baseState.title} is still " +

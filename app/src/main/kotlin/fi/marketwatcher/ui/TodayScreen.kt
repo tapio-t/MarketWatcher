@@ -109,7 +109,7 @@ internal fun TodayScreen(
 }
 
 /**
- * Past-year chart with a day scroller and the selected day's six S&P 500 and Trend tiles. The selected
+ * Past-year chart with a day scroller and the selected day's day change, S&P 500 and Trend tiles. The selected
  * day lives in one [MutableIntState] read only by the cursor, the scroller and [SelectedDay], so moving
  * it never recomposes the rest of the Today screen.
  */
@@ -156,7 +156,7 @@ private fun PastYearChart(chart: ChartData, first: Int, last: Int, sel: MutableI
         cursor = { sel.intValue })
 }
 
-/** Date and state of the selected day, then its six S&P 500 and Trend tiles. Only this recomposes while scrubbing. */
+/** Date and state of the selected day, then its day change, S&P 500 and Trend tiles. Only this recomposes while scrubbing. */
 @Composable
 private fun SelectedDay(chart: ChartData, sel: MutableIntState, onInfo: (InfoKind, Reading) -> Unit) {
     val i = sel.intValue
@@ -169,6 +169,6 @@ private fun SelectedDay(chart: ChartData, sel: MutableIntState, onInfo: (InfoKin
                 overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false))
         }
-        ValueGrid(priceGroups(r), perRow = 3, onInfo = { kind -> onInfo(kind, r) })
+        ValueGrid(listOf(dayChangeGroup(r.price())) + priceGroups(r), perRow = 3, onInfo = { kind -> onInfo(kind, r) })
     }
 }

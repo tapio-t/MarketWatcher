@@ -119,6 +119,8 @@ data class Reading(
     val stateAsOf: String? = null,
     /** The sharp-fall rule changed on an estimated close (VOO): [state] is an estimate. */
     val stateEstimated: Boolean = false,
+    /** Display-only facts from [CloseStats] (days below the average, previous very sharp fall); set by the app. */
+    val facts: CloseFacts? = null,
 ) {
     val label: String get() = state.label + if (stateEstimated) " (estimate)" else ""
     /** Panic is shown because of the sharp-fall rule, not the engine's own rules. */

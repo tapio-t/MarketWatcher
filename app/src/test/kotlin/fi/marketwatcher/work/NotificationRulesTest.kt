@@ -99,6 +99,41 @@ class NotificationRulesTest {
         }
     }
 
+    private fun run(prev: Previous, days: Int, start: String = "2026-11-02", on: Boolean = true) =
+        NotificationRules.evaluate(prev, now(spx = 90.0, sma = 95.0).copy(belowRun = days, belowRunStart = start),
+            notifyState = false, notifyBelowSma = false, notifyBelowRun = on)
+
+    /** 10 closes in a row below the average: once per run, never on the first check after installing. */
+    @Test fun belowRunOncePerRun() {
+        val p = Previous(State.CALM, emptySet(), true, belowRunStart = "")
+        val n = run(p, 10).single()
+        assertEquals(NotificationRules.ID_BELOW_RUN, n.id)
+        assertEquals("S&P 500 below its 200-day average for 10 days", n.title)
+        assertTrue(n.text, n.text.startsWith("10 closes in a row below the 200-day average since 02.11.2026."))
+        assertEquals(NotificationRules.CHANNEL_BELOW_RUN, NotificationRules.channelOf(n.id))
+        assertTrue("9 days", run(p, 9).isEmpty())
+        assertEquals("missed a day: still notified", 1, run(p, 12).size)
+        assertTrue("this run already notified", run(p.copy(belowRunStart = "2026-11-02"), 11).isEmpty())
+        assertEquals("a new run", 1, run(p.copy(belowRunStart = "2026-03-19"), 10).size)
+        assertTrue("first check after installing", run(p.copy(belowRunStart = null), 10).isEmpty())
+        assertTrue("switch off", run(p, 10, on = false).isEmpty())
+    }
+
+    @Test fun belowRunTestIsSimulatedWhenNeeded() {
+        val t = NotificationRules.test(Kind.BELOW_RUN, now(spx = 100.0, sma = 95.0)).single()
+        assertEquals(NotificationRules.ID_BELOW_RUN + NotificationRules.TEST_ID_OFFSET, t.id)
+        assertTrue(t.text, t.text.startsWith("Simulated run"))
+        val real = NotificationRules.test(Kind.BELOW_RUN, now(spx = 90.0, sma = 95.0).copy(belowRun = 14, belowRunStart = "2026-11-02")).single()
+        assertEquals("Test: S&P 500 below its 200-day average for 14 days", real.title)
+        assertTrue("no average: nothing to test", NotificationRules.test(Kind.BELOW_RUN, now(sma = null)).isEmpty())
+    }
+
+    /** 0.25 replaces every channel (vibration can only be set at creation); each old one maps to its new one. */
+    @Test fun oldChannelsAreReplaced() {
+        assertEquals(setOf("state_economy", "below_sma", "sharp_fall", "vix_curve"), NotificationRules.OLD_CHANNELS.keys)
+        NotificationRules.OLD_CHANNELS.forEach { (old, new) -> assertEquals("${old}_v2", new) }
+    }
+
     private fun day(spx: Double, prev: Double?, date: String = "2026-10-14") =
         Now(date, State.CALM, emptySet(), emptyMap(), spx, 95.0, prevClose = prev, prevDate = "2026-10-13")
 

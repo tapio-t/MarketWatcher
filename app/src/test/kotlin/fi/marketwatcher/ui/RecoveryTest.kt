@@ -37,6 +37,18 @@ class RecoveryTest {
         assertEquals("2 years, 0 months", yearsMonths("2022-01-03", "2024-01-19"))
     }
 
+    /** Day change tile and History's gaps (0.25): years, months and days. */
+    @Test fun yearsMonthsDaysTexts() {
+        assertEquals("1 year, 6 months, 23 days", yearsMonthsDays("2025-04-10", "2026-11-02"))
+        assertEquals("1 y 6 mo 23 d", ymdShort("2025-04-10", "2026-11-02"))
+        assertEquals("3 mo 0 d", ymdShort("2025-04-10", "2025-07-10"))
+        assertEquals("6 d", ymdShort("2025-04-04", "2025-04-10"))
+        assertEquals("7 days", daysAsYmd(7.0))
+        assertEquals("4 months, 2 days", daysAsYmd(122.0))
+        assertEquals("4 mo 2 d", daysAsYmd(122.0, short = true))
+        assertEquals("1 year, 0 months, 1 day", daysAsYmd(366.0))
+    }
+
     /** The recoveries of 2008–2025 in the bundled history. */
     @Test fun historicRecoveries() {
         val o = JSONObject(TestData.golden())

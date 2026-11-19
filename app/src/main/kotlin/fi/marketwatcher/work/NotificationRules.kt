@@ -1,5 +1,6 @@
 package fi.marketwatcher.work
 
+import fi.marketwatcher.engine.CloseStats
 import fi.marketwatcher.engine.Context
 import fi.marketwatcher.engine.Explain
 import fi.marketwatcher.engine.Fall
@@ -25,6 +26,11 @@ object NotificationRules {
          * not known yet, e.g. the first check after installing: nothing is notified then).
          */
         val inversionDate: String? = null,
+        /**
+         * The first close of the last run below the 200-day average already notified ("" = none; null =
+         * not known yet, e.g. the first check after installing: nothing is notified then).
+         */
+        val belowRunStart: String? = null,
     )
 
     /**
@@ -52,6 +58,9 @@ object NotificationRules {
         val stateEstimated: Boolean = false,
         /** Set when [state] is Panic from the sharp-fall rule: what happened, for the notification text. */
         val sharpFallNote: String? = null,
+        /** Closes in a row below the 200-day average up to [date], and the first of them (see [CloseFacts]). */
+        val belowRun: Int? = null,
+        val belowRunStart: String? = null,
     ) {
         val belowSma: Boolean? get() = sma?.let { spx < it }
         val change: Double? get() = prevClose?.let { spx / it - 1 }
@@ -62,27 +71,37 @@ object NotificationRules {
     /** A day when VIX/VIX3M reached 1.00 (as shown) after being at 0.90 or below. */
     data class Inversion(val date: String, val ratio: Double, val vix: Double?, val vix3m: Double?)
 
-    enum class Kind { STATE, BELOW_SMA, SHARP_FALL, CURVE }
+    enum class Kind { STATE, BELOW_SMA, BELOW_RUN, SHARP_FALL, CURVE }
 
     const val ID_STATE = 1
     const val ID_ECONOMY = 2
     const val ID_BELOW_SMA = 3
     const val ID_SHARP_FALL = 4
     const val ID_CURVE = 5
+    const val ID_BELOW_RUN = 6
     /** Test notices use their own ids so they never replace or hide a real one. */
     const val TEST_ID_OFFSET = 100
 
-    /** Notification channels ("notification types" in Android settings), both high importance. */
-    const val CHANNEL_STATE = "state_economy"
-    const val CHANNEL_BELOW_SMA = "below_sma"
-    const val CHANNEL_SHARP_FALL = "sharp_fall"
-    const val CHANNEL_CURVE = "vix_curve"
+    /**
+     * Notification channels ("notification types" in Android settings), all high importance with
+     * vibration. 0.25 added "_v2" ids: Android lets an app set a channel's vibration only when it is
+     * created, so the older channels ([OLD_CHANNELS]) are replaced (see [Notifier.ensureChannels]).
+     */
+    const val CHANNEL_STATE = "state_economy_v2"
+    const val CHANNEL_BELOW_SMA = "below_sma_v2"
+    const val CHANNEL_BELOW_RUN = "below_run_v2"
+    const val CHANNEL_SHARP_FALL = "sharp_fall_v2"
+    const val CHANNEL_CURVE = "vix_curve_v2"
+    /** The channels up to 0.24 (no vibration set), each with its 0.25 replacement. */
+    val OLD_CHANNELS = mapOf("state_economy" to CHANNEL_STATE, "below_sma" to CHANNEL_BELOW_SMA,
+        "sharp_fall" to CHANNEL_SHARP_FALL, "vix_curve" to CHANNEL_CURVE)
     /** The old default-importance channel (versions up to 0.8); removed on start. */
     const val LEGACY_CHANNEL = "market_state"
 
     /** The channel a notice goes to; a test goes to the same channel as the real notice. */
     fun channelOf(noticeId: Int): String = when (noticeId % TEST_ID_OFFSET) {
         ID_BELOW_SMA -> CHANNEL_BELOW_SMA
+        ID_BELOW_RUN -> CHANNEL_BELOW_RUN
         ID_SHARP_FALL -> CHANNEL_SHARP_FALL
         ID_CURVE -> CHANNEL_CURVE
         else -> CHANNEL_STATE
@@ -90,6 +109,7 @@ object NotificationRules {
 
     fun channelOf(kind: Kind): String = when (kind) {
         Kind.BELOW_SMA -> CHANNEL_BELOW_SMA
+        Kind.BELOW_RUN -> CHANNEL_BELOW_RUN
         Kind.SHARP_FALL -> CHANNEL_SHARP_FALL
         Kind.CURVE -> CHANNEL_CURVE
         Kind.STATE -> CHANNEL_STATE
@@ -109,7 +129,8 @@ object NotificationRules {
     /** [price]: the newest S&P 500 close (a price-only day when VIX is not published yet). */
     fun now(r: Reading, flags: Set<String>, price: PriceView = r.price(), inversion: Inversion? = null) =
         Now(price.date, r.state, flags, flagNotes(r.context), price.close, price.sma200, price.prevClose, price.prevDate,
-            price.estimated, price.exDividend, inversion, r.stateEstimated, sharpFallNote(r))
+            price.estimated, price.exDividend, inversion, r.stateEstimated, sharpFallNote(r),
+            price.facts?.belowRun, price.facts?.belowRunStart)
 
     /** The notification text of a Panic shown by the sharp-fall rule, or null. */
     fun sharpFallNote(r: Reading): String? {
@@ -117,6 +138,9 @@ object NotificationRules {
         return "Very sharp fall: S&P 500 ${pct2(r.fallChange)} on ${Explain.dmy(r.fallDate)}. Panic is shown until a " +
             "day closes at −0.25% or better. It doesn't count as panic in a dip for the later fading check."
     }
+
+    /** The "below the average for X days" notice comes at this many closes in a row. */
+    const val BELOW_RUN_ALERT = CloseStats.BELOW_RUN_ALERT
 
     /** VIX/VIX3M at or above this, as shown (two decimals), is an inverted curve. */
     const val CURVE_ON = 1.00
@@ -160,11 +184,13 @@ object NotificationRules {
      *  - state change, except No panic ↔ Pullback (needs a known previous state);
      *  - an economy flag that was off and is now on;
      *  - first close below the 200-day average; again only after a close back above it;
+     *  - [BELOW_RUN_ALERT] closes in a row below the average, once per run (needs a known previous check);
      *  - a sharp fall (−2.00% or worse vs the previous close), once per trading day;
      *  - a volatility-curve inversion newer than the last one seen (needs a known previous check).
      */
     fun evaluate(prev: Previous, now: Now, notifyState: Boolean, notifyBelowSma: Boolean,
-                 notifySharpFall: Boolean = false, notifyCurve: Boolean = false): List<Notice> = buildList {
+                 notifySharpFall: Boolean = false, notifyCurve: Boolean = false,
+                 notifyBelowRun: Boolean = false): List<Notice> = buildList {
         if (notifyState) {
             val p = prev.state
             if (p != null && p != now.state && !(p in QUIET && now.state in QUIET)) {
@@ -186,6 +212,18 @@ object NotificationRules {
                 add(Notice(ID_BELOW_SMA, "S&P 500 is below its 200-day average" + now.mark(),
                     now.estimateNote() + String.format(Locale.US, "Close %,.0f on %s is %.1f%% below the 200-day average %,.0f. %s",
                         now.spx, Explain.dmy(now.date), (1 - now.spx / sma) * 100, sma, now.state.label)))
+            }
+        }
+        if (notifyBelowRun) {
+            val run = now.belowRun ?: 0
+            val seen = prev.belowRunStart
+            val sma = now.sma
+            if (run >= BELOW_RUN_ALERT && seen != null && now.belowRunStart != seen && sma != null) {
+                add(Notice(ID_BELOW_RUN, "S&P 500 below its 200-day average for $run days" + now.mark(),
+                    now.estimateNote() + String.format(Locale.US, "%d closes in a row below the 200-day average since %s. " +
+                        "Close %,.0f on %s is %.1f%% below the average %,.0f. %s",
+                        run, Explain.dmy(now.belowRunStart), now.spx, Explain.dmy(now.date), (1 - now.spx / sma) * 100, sma,
+                        now.state.label) + String.format(Locale.US, " In 2007–2026 about one run a year reached %d days.", BELOW_RUN_ALERT)))
             }
         }
         if (notifySharpFall) {
@@ -237,6 +275,16 @@ object NotificationRules {
                 val simulated = n !== now
                 evaluate(Previous(null, emptySet(), false), n, notifyState = false, notifyBelowSma = true)
                     .map { if (simulated) it.copy(text = "Simulated close (today's real close is above the average). " + it.text) else it }
+            }
+            Kind.BELOW_RUN -> {
+                // If today's close is not BELOW_RUN_ALERT days into a run, simulate a run of that length.
+                val real = (now.belowRun ?: 0) >= BELOW_RUN_ALERT && now.sma != null
+                val sma = now.sma ?: 0.0
+                val n = if (real) now else now.copy(belowRun = BELOW_RUN_ALERT, belowRunStart = now.belowRunStart ?: now.date,
+                    spx = if (now.belowSma == true) now.spx else sma * 0.98)
+                evaluate(Previous(null, emptySet(), null, belowRunStart = ""), n, notifyState = false,
+                    notifyBelowSma = false, notifyBelowRun = true)
+                    .map { if (!real) it.copy(text = "Simulated run (today's close is not $BELOW_RUN_ALERT days below the average). " + it.text) else it }
             }
             Kind.SHARP_FALL -> {
                 // If today's change is not a sharp fall, simulate a previous close 2.5% higher.
