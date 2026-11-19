@@ -39,7 +39,7 @@ class NotificationRulesTest {
         val n = now(flags = setOf("Rate shock", "High valuation"))
         val notice = NotificationRules.evaluate(Previous(State.CALM, setOf("High valuation"), false), n,
             notifyState = true, notifyBelowSma = false).single()
-        assertEquals("Economy: Rate shock", notice.title)
+        assertEquals("🟠 Economy: Rate shock", notice.title)
         assertEquals("Rate shock note.", notice.text)
     }
 
@@ -74,7 +74,7 @@ class NotificationRulesTest {
             val t = NotificationRules.test(Kind.STATE, now(s))
             assertEquals("state $s", listOf(101, 102), t.map { it.id })
             assertTrue(t.all { it.title.startsWith("Test: ") })
-            assertEquals(s.label, t[0].title.removePrefix("Test: "))
+            assertEquals(s.label, t[0].title.removePrefix("Test: 🟠 "))
         }
     }
 
@@ -108,7 +108,7 @@ class NotificationRulesTest {
         val p = Previous(State.CALM, emptySet(), true, belowRunStart = "")
         val n = run(p, 10).single()
         assertEquals(NotificationRules.ID_BELOW_RUN, n.id)
-        assertEquals("S&P 500 below its 200-day average for 10 days", n.title)
+        assertEquals("🟠 S&P 500 below its 200-day average for 10 days", n.title)
         assertTrue(n.text, n.text.startsWith("10 closes in a row below the 200-day average since 02.11.2026."))
         assertEquals(NotificationRules.CHANNEL_BELOW_RUN, NotificationRules.channelOf(n.id))
         assertTrue("9 days", run(p, 9).isEmpty())
@@ -124,7 +124,7 @@ class NotificationRulesTest {
         assertEquals(NotificationRules.ID_BELOW_RUN + NotificationRules.TEST_ID_OFFSET, t.id)
         assertTrue(t.text, t.text.startsWith("Simulated run"))
         val real = NotificationRules.test(Kind.BELOW_RUN, now(spx = 90.0, sma = 95.0).copy(belowRun = 14, belowRunStart = "2026-11-02")).single()
-        assertEquals("Test: S&P 500 below its 200-day average for 14 days", real.title)
+        assertEquals("Test: 🟠 S&P 500 below its 200-day average for 14 days", real.title)
         assertTrue("no average: nothing to test", NotificationRules.test(Kind.BELOW_RUN, now(sma = null)).isEmpty())
     }
 
@@ -148,7 +148,7 @@ class NotificationRulesTest {
         assertTrue("switch off", sharp(p, day(98.0, 100.0), on = false).isEmpty())
         assertTrue("no previous close", sharp(p, day(98.0, null)).isEmpty())
         val n = sharp(p, day(94.0, 100.0)).single()
-        assertTrue(n.title, n.title.startsWith("Extreme fall: S&P 500 −6.00% on 14.10.2026"))
+        assertTrue(n.title, n.title.startsWith("🟠 Extreme fall: S&P 500 −6.00% on 14.10.2026"))
         assertEquals(NotificationRules.CHANNEL_SHARP_FALL, NotificationRules.channelOf(n.id))
     }
 
@@ -156,18 +156,18 @@ class NotificationRulesTest {
         val t = NotificationRules.test(Kind.SHARP_FALL, day(100.0, 99.0)).single()
         assertEquals(NotificationRules.ID_SHARP_FALL + NotificationRules.TEST_ID_OFFSET, t.id)
         assertTrue(t.text, t.text.startsWith("Simulated previous close"))
-        assertTrue(t.title, t.title.startsWith("Test: Sharp fall: S&P 500 −2.50%"))
+        assertTrue(t.title, t.title.startsWith("Test: 🟠 Sharp fall: S&P 500 −2.50%"))
     }
 
     @Test fun estimatedCloseIsMarkedInTheTitles() {
         val p = Previous(State.CALM, emptySet(), false)
         val est = day(97.0, 100.0).copy(estimated = true, exDividend = true)
         val fall = sharp(p, est).single()
-        assertEquals("Very sharp fall (estimate): S&P 500 −3.00% on 14.10.2026", fall.title)
+        assertEquals("🟠 Very sharp fall (estimate): S&P 500 −3.00% on 14.10.2026", fall.title)
         assertTrue(fall.text, fall.text.startsWith("Estimated from VOO; FRED has not published the close yet. Ex-dividend day. "))
         val below = NotificationRules.evaluate(p, est.copy(spx = 90.0), notifyState = false, notifyBelowSma = true).single()
-        assertEquals("S&P 500 is below its 200-day average (estimate)", below.title)
-        assertEquals("FRED's close", "S&P 500 is below its 200-day average",
+        assertEquals("🟠 S&P 500 is below its 200-day average (estimate)", below.title)
+        assertEquals("FRED's close", "🟠 S&P 500 is below its 200-day average",
             NotificationRules.evaluate(p, day(90.0, 100.0), notifyState = false, notifyBelowSma = true).single().title)
     }
 
@@ -199,7 +199,7 @@ class NotificationRulesTest {
         val inv = Inversion("2026-11-05", 28.18 / 25.55, 28.18, 25.55)
         val n = curve(Previous(State.CALM, emptySet(), false, inversionDate = "2026-04-07"), inv).single()
         assertEquals(NotificationRules.ID_CURVE, n.id)
-        assertEquals("Volatility curve inverted: VIX/VIX3M 1.10 on 05.11.2026", n.title)
+        assertEquals("🟠 Volatility curve inverted: VIX/VIX3M 1.10 on 05.11.2026", n.title)
         assertTrue(n.text, n.text.startsWith("VIX 28.18 is above VIX3M 25.55"))
         assertEquals(NotificationRules.CHANNEL_CURVE, NotificationRules.channelOf(n.id))
         assertTrue("none seen before", curve(Previous(State.CALM, emptySet(), false, inversionDate = ""), inv).size == 1)
@@ -212,7 +212,7 @@ class NotificationRulesTest {
     @Test fun inversionTestIsSimulatedWhenNeeded() {
         val t = NotificationRules.test(Kind.CURVE, now()).single()
         assertEquals(NotificationRules.ID_CURVE + NotificationRules.TEST_ID_OFFSET, t.id)
-        assertTrue(t.title, t.title.startsWith("Test: Volatility curve inverted: VIX/VIX3M 1.05"))
+        assertTrue(t.title, t.title.startsWith("Test: 🟠 Volatility curve inverted: VIX/VIX3M 1.05"))
         assertTrue(t.text, t.text.startsWith("Simulated inversion"))
     }
 

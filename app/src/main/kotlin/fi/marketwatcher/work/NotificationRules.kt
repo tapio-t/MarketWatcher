@@ -190,7 +190,14 @@ object NotificationRules {
      */
     fun evaluate(prev: Previous, now: Now, notifyState: Boolean, notifyBelowSma: Boolean,
                  notifySharpFall: Boolean = false, notifyCurve: Boolean = false,
-                 notifyBelowRun: Boolean = false): List<Notice> = buildList {
+                 notifyBelowRun: Boolean = false): List<Notice> = rules(prev, now, notifyState, notifyBelowSma,
+        notifySharpFall, notifyCurve, notifyBelowRun).map { it.copy(title = MARK + it.title) }
+
+    /** Every notification title starts with this, so MarketWatcher's stand out in the notification list (0.27). */
+    const val MARK = "🟠 "
+
+    private fun rules(prev: Previous, now: Now, notifyState: Boolean, notifyBelowSma: Boolean,
+                      notifySharpFall: Boolean, notifyCurve: Boolean, notifyBelowRun: Boolean): List<Notice> = buildList {
         if (notifyState) {
             val p = prev.state
             if (p != null && p != now.state && !(p in QUIET && now.state in QUIET)) {
@@ -248,6 +255,13 @@ object NotificationRules {
             }
         }
     }
+
+    /** The test notice of the reminder switch (Settings): a test id, so it never starts real reminders. */
+    const val ID_REMINDER_TEST = TEST_ID_OFFSET + 9
+
+    fun reminderTest() = Notice(ID_REMINDER_TEST, "Test: ${MARK}Reminder vibration",
+        "Leave this notification unread: the phone vibrates again in about 1 minute. Real notifications are " +
+            "reminded every ${Reminders.INTERVAL_MINUTES} minutes while unread, at most ${Reminders.TIMES} times, 08:00–18:00.")
 
     /** "−2.41%" with a real minus sign. */
     fun pct2(x: Double): String = (if (x < 0) "−" else "+") + String.format(Locale.US, "%.2f%%", Math.abs(x) * 100)

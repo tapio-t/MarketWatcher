@@ -31,5 +31,7 @@
         </activity>
         <!-- The 08:00 alarm that shows notifications held overnight (work/NotificationGate.kt). -->
         <receiver android:name=".work.DeliverHeldReceiver" android:exported="false" />
+        <!-- Reminder vibrations: posts an unread notification again every 120 minutes (work/Reminders.kt). -->
+        <receiver android:name=".work.ReminderReceiver" android:exported="false" />
     </application>
 </manifest>

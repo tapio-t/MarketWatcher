@@ -10,3 +10,6 @@ __pycache__/
 app/src/main/assets/
 app/src/test/resources/golden_v4.json
 *.csv
+
+# Claude Code personal settings (not shared)
+.claude/settings.local.json

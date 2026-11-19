@@ -52,6 +52,7 @@ import fi.marketwatcher.engine.price
 import fi.marketwatcher.work.NotificationGate
 import fi.marketwatcher.work.NotificationRules
 import fi.marketwatcher.work.QuietHours
+import fi.marketwatcher.work.Reminders
 import java.time.ZonedDateTime
 import fi.marketwatcher.work.NotificationRules.Kind
 import fi.marketwatcher.work.Notifier
@@ -83,7 +84,8 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
     var notifySharp by remember { mutableStateOf(settings.notifySharpFall) }
     var notifyCurve by remember { mutableStateOf(settings.notifyCurve) }
     var notifyRun by remember { mutableStateOf(settings.notifyBelowRun) }
-    var messageStyle by remember { mutableStateOf(settings.messageStyle) }
+    var remind by remember { mutableStateOf(settings.remindUnread) }
+    var remindResult by remember { mutableStateOf<TestResult?>(null) }
     var showLog by remember { mutableStateOf(false) }
     var held by remember { mutableStateOf(NotificationGate.held(ctx)) }
     val results = remember { mutableStateMapOf<Kind, TestResult>() }
@@ -190,6 +192,25 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
 
     fun test(kind: Kind) = if (Notifier.needsPermission(ctx)) requestPermission(kind) else runTest(kind)
 
+    /** Posts a test notice and posts it again after [Reminders.TEST_DELAY_MS] if it is still unread. */
+    fun testReminder() {
+        if (Notifier.needsPermission(ctx)) { requestPermission(null); return }
+        if (!QuietHours.isOpen(ZonedDateTime.now())) {
+            remindResult = TestResult("Reminders come only 08:00–18:00, so this test works only then.")
+            return
+        }
+        val n = NotificationRules.reminderTest()
+        Notifier.blocked(ctx, NotificationRules.channelOf(n.id))?.let { remindResult = TestResult(it.message, openSettings = true); return }
+        if (!Notifier.post(ctx, n)) {
+            remindResult = TestResult("Posting failed. Check notification settings.", openSettings = true)
+            return
+        }
+        Reminders.start(ctx, n, delayMs = Reminders.TEST_DELAY_MS, times = 1)
+        remindResult = TestResult("Shown. Leave it unread and lock the phone: it vibrates again in about 1 minute " +
+            "(Android may run the reminder a few minutes later while the phone sleeps)." +
+            if (!remind) " This switch is off, so real notifications get no reminders." else "")
+    }
+
     fun setSwitch(kind: Kind, on: Boolean) {
         when (kind) {
             Kind.STATE -> { notify = on; settings.notifications = on }
@@ -228,14 +249,17 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
             text = "Notify when the volatility curve inverts (VIX/VIX3M 1.00 or above; again after 0.90 or below)",
             checked = notifyCurve, onChange = { setSwitch(Kind.CURVE, it) },
             result = results[Kind.CURVE], onTest = { test(Kind.CURVE) }, onOpenSettings = ::openNotificationSettings)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = messageStyle, onCheckedChange = { messageStyle = it; settings.messageStyle = it })
-            Spacer(Modifier.width(12.dp))
-            Text("Show notifications as messages, for phones that alert again for unread messages. Samsung's " +
-                "Smart alert (vibrate when picked up) did not include them on a Galaxy S23+.",
-                fontSize = 14.sp, modifier = Modifier.weight(1f))
-        }
-        Text("All notifications vibrate.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        NotificationSetting(
+            text = "Remind with a vibration every ${Reminders.INTERVAL_MINUTES} minutes while a notification is unread " +
+                "(at most ${Reminders.TIMES} times, 08:00–18:00)",
+            checked = remind,
+            onChange = { on ->
+                remind = on; settings.remindUnread = on
+                if (!on) Reminders.clear(ctx)
+            },
+            result = remindResult, onTest = ::testReminder, onOpenSettings = ::openNotificationSettings)
+        Text("All notifications vibrate and start with ${NotificationRules.MARK.trim()}.", fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(QuietHours.TEXT, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         if (held.isNotEmpty()) Text("Held until 08:00: " + held.joinToString("; ") { it.title },
             fontSize = 12.sp, color = palette().warn)
