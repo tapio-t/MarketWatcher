@@ -38,7 +38,8 @@ class RemindersTest {
         val second = Reminders.next(first, ms(at(17, 0)))!!
         assertEquals(ms(at(19, 0)), second.dueMs)
         assertEquals(Action.DROP, Reminders.decide(second, at(19, 0), listed = true))
-        assertEquals("18:00 itself is outside", Action.DROP, Reminders.decide(second, at(18, 0), listed = true))
+        assertEquals("due at 18:00 itself is outside", Action.DROP,
+            Reminders.decide(Pending(notice, ms(at(18, 0)), 2), at(18, 0), listed = true))
     }
 
     @Test fun everyTwoHoursAtMostThreeTimes() {
