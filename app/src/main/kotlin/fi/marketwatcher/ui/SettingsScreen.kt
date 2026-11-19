@@ -231,8 +231,8 @@ internal fun SettingsScreen(settings: Settings, latest: Reading?, price: PriceVi
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = messageStyle, onCheckedChange = { messageStyle = it; settings.messageStyle = it })
             Spacer(Modifier.width(12.dp))
-            Text("Show notifications as messages, so the phone can alert again for them like for unread " +
-                "messages (on Samsung: Smart alert vibrates when you pick up the phone, if the phone includes them)",
+            Text("Show notifications as messages, for phones that alert again for unread messages. Samsung's " +
+                "Smart alert (vibrate when picked up) did not include them on a Galaxy S23+.",
                 fontSize = 14.sp, modifier = Modifier.weight(1f))
         }
         Text("All notifications vibrate.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

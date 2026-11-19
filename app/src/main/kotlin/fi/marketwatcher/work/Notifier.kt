@@ -115,7 +115,7 @@ object Notifier {
         }
     }
 
-    /** Settings > "Message-style notifications" (0.25, on by default). */
+    /** Settings > "Show notifications as messages" (0.25, off by default). */
     private fun messageStyle(ctx: Context): Boolean = fi.marketwatcher.data.Settings(ctx).messageStyle
 
     /**

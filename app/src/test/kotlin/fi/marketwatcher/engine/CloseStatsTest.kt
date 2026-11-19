@@ -19,12 +19,25 @@ class CloseStatsTest {
     }
     private val stats by lazy { CloseStats.of(days, emptyList()) }
 
-    @Test fun mediansOverFullYears() {
-        assertEquals(2007..2025, stats.fullYears)
-        assertEquals(6.0, stats.medianFallDaysPerYear(Fall.SHARP), 0.0)
-        assertEquals(1.0, stats.medianFallDaysPerYear(Fall.VERY_SHARP), 0.0)
-        assertEquals(0.0, stats.medianFallDaysPerYear(Fall.EXTREME), 0.0)
+    /** The gaps use every fall of −3.00% or worse, extreme ones included, through the newest close. */
+    @Test fun everyVerySharpFallIsCounted() {
         assertEquals(83, stats.verySharpDates.size)
+        val closes = days.map { it.spx }
+        val extreme = (1 until days.size).filter { SignalEngine.dayChangeBp(closes[it], closes[it - 1]) <= -500 }.map { days[it].date }
+        assertEquals(19, extreme.size)
+        assertTrue(stats.verySharpDates.containsAll(extreme))
+        assertEquals("2007-02-27", stats.verySharpDates.first())
+        assertEquals("2025-04-10", stats.verySharpDates.last())
+        // −2.99% is not very sharp, −3.00% is (compared as shown, in hundredths).
+        val c = CloseStats(listOf("2020-01-01", "2020-01-02", "2020-01-03"), doubleArrayOf(100.0, 97.01, 94.0997))
+        assertEquals(listOf("2020-01-03"), c.verySharpDates)
+    }
+
+    @Test fun sharpFallDaysPerYear() {
+        assertEquals(2007..2026, stats.countedYears)
+        val per = stats.fallDaysPerYear().toMap()
+        assertEquals(11, per[2007]); assertEquals(41, per[2008]); assertEquals(0, per[2017]); assertEquals(2, per[2026])
+        assertEquals(219, per.values.sum())
     }
 
     /** Plain gap: every pair of very sharp falls; burst gap: only gaps longer than 30 days. */
@@ -42,13 +55,11 @@ class CloseStatsTest {
         assertEquals(11, stats.fallDays(2008, Fall.EXTREME))
     }
 
-    /** A run is counted in full in every year it touches: 2008–2009's run started on 27.12.2007. */
-    @Test fun longestRunBelowAverage() {
-        assertEquals(CloseStats.Run("2007-12-27", "2009-05-29", 358), stats.longestRunIn(2008))
-        assertEquals(CloseStats.Run("2007-12-27", "2009-05-29", 358), stats.longestRunIn(2009))
-        assertEquals(CloseStats.Run("2022-04-08", "2022-11-29", 162), stats.longestRunIn(2022))
-        assertEquals(CloseStats.Run("2026-03-19", "2026-04-07", 13), stats.longestRunIn(2026))
-        assertNull(stats.longestRunIn(2017))
+    /** A run that started before the History readings (2008) is counted in full. */
+    @Test fun runCountedFromTheFirstClose() {
+        assertEquals("2007-12-27", stats.factsFor("2009-05-29")!!.belowRunStart)
+        assertEquals(358, stats.factsFor("2009-05-29")!!.belowRun)
+        assertEquals(0, stats.factsFor("2009-06-01")!!.belowRun)
     }
 
     @Test fun factsOfOneClose() {

@@ -50,8 +50,11 @@ class NotifierDeviceTest {
         NotificationRules.OLD_CHANNELS.keys.forEach { assertEquals(it, null, nm.getNotificationChannel(it)) }
     }
 
-    /** Message style (0.25, on by default): category "msg", so Samsung's Smart alert may include it. */
-    @Test fun noticeIsAMessage() {
+    /** Message style (0.25, a Settings switch, off by default): category "msg". */
+    @Test fun noticeIsAMessageWhenSwitchedOn() {
+        val settings = fi.marketwatcher.data.Settings(ctx)
+        val before = settings.messageStyle
+        settings.messageStyle = true
         val now = NotificationRules.Now("2026-09-22", State.CALM, emptySet(), emptyMap(), 100.0, 95.0)
         val notice = NotificationRules.test(NotificationRules.Kind.BELOW_SMA, now).single()
         assertTrue(Notifier.post(ctx, notice))
@@ -59,6 +62,7 @@ class NotifierDeviceTest {
         var n: android.app.Notification? = null
         repeat(20) { if (n == null) { Thread.sleep(25); n = nm.activeNotifications.firstOrNull { it.id == notice.id }?.notification } }
         nm.cancel(notice.id)
+        settings.messageStyle = before
         assumeFalse("Removed by another app's notification filter", n == null && Notifier.listenerApps(ctx).isNotEmpty())
         assertEquals(android.app.Notification.CATEGORY_MESSAGE, n!!.category)
     }

@@ -58,6 +58,8 @@ internal fun InfoDialog(kind: InfoKind, r: Reading, price: PriceView = r.price()
     val warn = palette().warn
 
     val info: Info = when (kind) {
+        // History's sharp-fall tiles have their own pop-up (HistoryScreen).
+        InfoKind.PLAIN_GAP, InfoKind.BURST_GAP -> return
         InfoKind.VIX_RATIO -> {
             val title = "VIX / VIX3M"
             val value = fmt("%.2f", r.vixRatio) + if (r.vixRatio >= 1.0) " · backwardation" else " · contango"
